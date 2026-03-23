@@ -107,8 +107,10 @@ const MarkingExportCard = forwardRef<View, Props>((props, ref) => {
         backgroundColor: '#0A0A0A',
         padding: 20,
         position: 'absolute',
-        left: CARD_WIDTH + 200,
+        left: 0,
         top: 0,
+        opacity: 0,
+        pointerEvents: 'none',
       }}
     >
       <CardHeader season={props.season} />

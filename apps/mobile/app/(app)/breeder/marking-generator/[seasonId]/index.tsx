@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import {
   View,
   Text,
@@ -11,11 +11,12 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router'
 import { captureRef } from 'react-native-view-shot'
 import * as MediaLibrary from 'expo-media-library'
+import * as SecureStore from 'expo-secure-store'
 import SimpleBottomSheet, {
   BottomSheetScrollView,
   type SimpleBottomSheetRef,
 } from '../../../../../components/SimpleBottomSheet'
-import MarkingExportCard from '../../../../../components/MarkingExportCard'
+import MarkingExportCard, { type SeasonTotals } from '../../../../../components/MarkingExportCard'
 import { apiRequest } from '../../../../../lib/api'
 
 type Season = {
@@ -99,6 +100,7 @@ export default function SeasonScreen() {
   const detailSheetRef = useRef<SimpleBottomSheetRef>(null)
   const seasonCardRef = useRef<View>(null)
   const matingCardRef = useRef<View>(null)
+  const exportSheetRef = useRef<SimpleBottomSheetRef>(null)
 
   const [season, setSeason] = useState<Season | null>(null)
   const [matings, setMatings] = useState<Mating[]>([])
@@ -107,8 +109,18 @@ export default function SeasonScreen() {
   const [deleting, setDeleting] = useState(false)
   const [deletingSeason, setDeletingSeason] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sharing, setSharing] = useState(false)
-  const [sharingMating, setSharingMating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [exportTarget, setExportTarget] = useState<'season' | 'mating'>('season')
+
+  // Export card customization
+  const [farmName, setFarmName] = useState('')
+  const [ownerName, setOwnerName] = useState('')
+  const [includeBreedingTotals, setIncludeBreedingTotals] = useState(true)
+
+  useEffect(() => {
+    SecureStore.getItemAsync('tiknok_farm_name').then((v) => v && setFarmName(v))
+    SecureStore.getItemAsync('tiknok_owner_name').then((v) => v && setOwnerName(v))
+  }, [])
 
   // Single sheet, two modes: 'detail' shows hen list, 'edit' shows the count form
   const [sheetMode, setSheetMode] = useState<'detail' | 'edit'>('detail')
@@ -266,38 +278,37 @@ export default function SeasonScreen() {
     setSeason(s)
   }
 
-  async function saveCardToGallery(ref: React.RefObject<View>, label: string) {
-    const { status } = await MediaLibrary.requestPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photo library to save markings.')
-      return
-    }
-    const uri = await captureRef(ref, { format: 'png', quality: 1 })
-    await MediaLibrary.saveToLibraryAsync(uri)
-    Alert.alert('Saved!', `${label} saved to your Photos.`)
+  function handleShareSeason() {
+    setExportTarget('season')
+    exportSheetRef.current?.expand()
   }
 
-  async function handleShareSeason() {
-    if (!seasonCardRef.current) return
-    setSharing(true)
+  function handleShareMating() {
+    setExportTarget('mating')
+    exportSheetRef.current?.expand()
+  }
+
+  async function handleConfirmExport() {
+    const ref = exportTarget === 'season' ? seasonCardRef : matingCardRef
+    if (!ref.current) return
+    setSaving(true)
     try {
-      await saveCardToGallery(seasonCardRef, 'Markings card')
+      await SecureStore.setItemAsync('tiknok_farm_name', farmName)
+      await SecureStore.setItemAsync('tiknok_owner_name', ownerName)
+      exportSheetRef.current?.close()
+      await new Promise((r) => setTimeout(r, 350))
+      const { status } = await MediaLibrary.requestPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow access to your photo library to save markings.')
+        return
+      }
+      const uri = await captureRef(ref, { format: 'png', quality: 1 })
+      await MediaLibrary.saveToLibraryAsync(uri)
+      Alert.alert('Saved!', 'Card saved to your Photos.')
     } catch {
       Alert.alert('Error', 'Could not save image. Try again.')
     } finally {
-      setSharing(false)
-    }
-  }
-
-  async function handleShareMating() {
-    if (!matingCardRef.current) return
-    setSharingMating(true)
-    try {
-      await saveCardToGallery(matingCardRef, 'Mating card')
-    } catch {
-      Alert.alert('Error', 'Could not save image. Try again.')
-    } finally {
-      setSharingMating(false)
+      setSaving(false)
     }
   }
 
@@ -456,13 +467,13 @@ export default function SeasonScreen() {
         {generated && matings.some((m) => m.hens.some((h) => h.marking)) && (
           <TouchableOpacity
             onPress={handleShareSeason}
-            disabled={sharing}
+            disabled={saving}
             style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#3B82F644', marginBottom: 16, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
             activeOpacity={0.7}
           >
-            {sharing
+            {saving
               ? <ActivityIndicator color="#3B82F6" size="small" />
-              : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save Markings to Photos</Text>
+              : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save Markings Card</Text>
             }
           </TouchableOpacity>
         )}
@@ -745,9 +756,9 @@ export default function SeasonScreen() {
                 <TouchableOpacity
                   style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#3B82F644' }}
                   onPress={handleShareMating}
-                  disabled={sharingMating}
+                  disabled={saving}
                 >
-                  {sharingMating
+                  {savingMating
                     ? <ActivityIndicator color="#3B82F6" size="small" />
                     : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save to Photos</Text>
                   }
@@ -780,19 +791,90 @@ export default function SeasonScreen() {
         )}
       </SimpleBottomSheet>
 
-      {/* Off-screen export cards — rendered but not visible, captured by view-shot */}
-      {season && (
-        <MarkingExportCard
-          ref={seasonCardRef}
-          mode="season"
-          season={{ name: season.name, year: season.year }}
-          matings={matings}
-        />
-      )}
+      {/* Export options sheet */}
+      <SimpleBottomSheet
+        ref={exportSheetRef}
+        snapPoints={['72%']}
+        enablePanDownToClose
+        backgroundStyle={{ backgroundColor: '#18181B' }}
+        handleIndicatorStyle={{ backgroundColor: '#A1A1AA' }}
+      >
+        <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Customize Card</Text>
+          <Text style={{ color: '#606060', fontSize: 13, marginBottom: 20 }}>These details will appear on the saved image.</Text>
+
+          <Text style={{ color: '#A0A0A0', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Farm Name</Text>
+          <TextInput
+            value={farmName}
+            onChangeText={setFarmName}
+            placeholder="e.g. Dela Cruz Gamefarm"
+            placeholderTextColor="#404040"
+            style={{ backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 10, color: '#FFFFFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}
+          />
+
+          <Text style={{ color: '#A0A0A0', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Owner Name</Text>
+          <TextInput
+            value={ownerName}
+            onChangeText={setOwnerName}
+            placeholder="e.g. Juan Dela Cruz"
+            placeholderTextColor="#404040"
+            style={{ backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 10, color: '#FFFFFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20 }}
+          />
+
+          {exportTarget === 'season' && (
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{ color: '#A0A0A0', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Include Breeding Totals?</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                {[{ label: 'Yes', value: true }, { label: 'No', value: false }].map(({ label, value }) => (
+                  <TouchableOpacity
+                    key={String(value)}
+                    onPress={() => setIncludeBreedingTotals(value)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, backgroundColor: includeBreedingTotals === value ? '#C8A84B22' : '#0A0A0A', borderColor: includeBreedingTotals === value ? '#C8A84B' : '#2A2A2A' }}
+                  >
+                    <Text style={{ color: includeBreedingTotals === value ? '#C8A84B' : '#606060', fontWeight: '600' }}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={handleConfirmExport}
+            disabled={saving}
+            activeOpacity={0.85}
+            style={{ backgroundColor: '#C8A84B', borderRadius: 14, paddingVertical: 16, alignItems: 'center' }}
+          >
+            {saving
+              ? <ActivityIndicator color="#000000" />
+              : <Text style={{ color: '#000000', fontSize: 16, fontWeight: '700' }}>Save to Photos</Text>
+            }
+          </TouchableOpacity>
+        </BottomSheetScrollView>
+      </SimpleBottomSheet>
+
+      {/* Off-screen export cards — rendered at opacity 0, captured by view-shot */}
+      {season && (() => {
+        const totals: SeasonTotals = computeSeasonTotals(matings)
+        return (
+          <MarkingExportCard
+            ref={seasonCardRef}
+            mode="season"
+            farmName={farmName}
+            ownerName={ownerName}
+            season={{ name: season.name, year: season.year }}
+            matings={matings}
+            includeBreedingTotals={includeBreedingTotals}
+            totals={totals}
+            expectedHatchDate={season.expectedHatchDate}
+          />
+        )
+      })()}
       {season && selectedMating && (
         <MarkingExportCard
           ref={matingCardRef}
           mode="mating"
+          farmName={farmName}
+          ownerName={ownerName}
           season={{ name: season.name, year: season.year }}
           mating={selectedMating}
         />

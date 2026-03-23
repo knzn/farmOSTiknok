@@ -22,6 +22,7 @@
         "backgroundColor": "#0A0A0A"
       },
       "package": "com.tiknok.app",
+      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ]

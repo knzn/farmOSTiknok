@@ -181,12 +181,12 @@ function assignHens(
   return hens
 }
 
-// Bare nose-only combos — reserved for manual assignment, used as last resort only
-const NOSE_ONLY = new Set(['LN', 'RN', 'DN'])
-
 /**
  * Pick an unused combo from the given group's pool.
- * Prefers combos with feet marks; bare nose-only (LN/RN/DN) are last resort.
+ * Prefers combination markings (those with a dash, e.g. LN-RI).
+ * Single-part markings (LN, RN, DN, LO, RI, etc.) are reserved —
+ * only used when all combination combos in the group are exhausted,
+ * or when manually assigned by the owner.
  * Throws if the group is exhausted.
  */
 function pickUnused(
@@ -199,8 +199,8 @@ function pickUnused(
   if (available.length === 0) {
     throw new Error(`Combo pool for group ${group} is exhausted`)
   }
-  // Prefer combos that include feet marks; only use bare nose-only as last resort
-  const preferred = available.filter((c) => !NOSE_ONLY.has(c))
+  // Prefer combination marks (contain a dash); single-part marks are last resort
+  const preferred = available.filter((c) => c.includes('-'))
   return (preferred.length > 0 ? preferred : available)[0]!
 }
 

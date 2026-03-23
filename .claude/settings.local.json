@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(npx expo:*)",
+      "Bash(pnpm list:*)",
+      "Bash(node -e \"const {withNativeWind} = require\\(''d:/2026/tiknok/node_modules/.pnpm/nativewind@4.2.3_react-native-reanimated@4.1.6_@babel+core@7.29.0_react-native-_gqpf4y5z4tpbm3rgsb2n5a4pje/node_modules/nativewind/metro''\\); console.log\\(withNativeWind.toString\\(\\).slice\\(0,500\\)\\)\")",
+      "Bash(find d:/2026/tiknok/node_modules/.pnpm -path */nativewind*/metro.js)",
+      "Bash(find d:/2026/tiknok/node_modules/.pnpm -path *nativewind*4.2.3* -name *.js)",
+      "Bash(pnpm add:*)",
+      "Bash(find d:/2026/tiknok/node_modules/.pnpm/react-native-screens@4.24.0_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0__react@19.1.0/node_modules/react-native-screens/src -name *.ts)",
+      "Bash(node -e \"const p = require\\(''d:/2026/tiknok/node_modules/.pnpm/expo@54.0.33_@babel+core@7.29.0_@expo+metro-runtime@6.1.2_expo-router@6.0.23_graphql@15.8.0_r_5cdpakf5hw6r77vsffejyrv7wq/node_modules/expo/package.json''\\); console.log\\(p.peerDependencies\\)\")",
+      "Bash(find /d/2026/tiknok/apps/mobile/app/'\\(app\\)' -type f)",
+      "Bash(pnpm --filter @app/api add @aws-sdk/client-s3 @aws-sdk/lib-storage)",
+      "Bash(pnpm --filter @app/api exec tsc --noEmit)",
+      "Bash(npx tsx:*)",
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls \"d:/2026/tiknok/apps/mobile/app/\\(app\\)/post/\")",
+      "Bash(npx ts-node:*)",
+      "Bash(find d:/2026/tiknok/apps/mobile/node_modules/react-native-view-shot -name *.d.ts)",
+      "Bash(find d:/2026/tiknok/node_modules/react-native-view-shot -name *.d.ts)",
+      "Bash(eas --version)",
+      "Bash(npx eas-cli:*)",
+      "Bash(eas whoami:*)",
+      "Bash(eas init:*)",
+      "Bash(eas project:info)",
+      "Bash(eas build:*)"
+    ]
+  }
+}

@@ -1,0 +1,620 @@
+# Tiknok API — Manual test script
+# Use VS Code REST Client extension (humao.rest-client) to run these
+# Run them TOP TO BOTTOM in order — later requests depend on earlier ones
+#
+# After REGISTER: copy the accessToken and refreshToken values into the @access and @refresh variables below
+# After CREATE SEASON: copy the _id into @seasonId
+# After CREATE MATING: copy the _id into @matingId1 / @matingId2 etc.
+
+@base = http://localhost:3001
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Paste your tokens here after running REGISTER or LOGIN
+# ──────────────────────────────────────────────────────────────────────────────
+@access  = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OWI5NzI1Zjg1ODdkMTZlMDdlZGFmOGYiLCJlbWFpbCI6InRlc3RicmVlZGVyQGV4YW1wbGUuY29tIiwidXNlcm5hbWUiOiJ0ZXN0YnJlZWRlciIsInR5cGUiOiJhY2Nlc3MiLCJpYXQiOjE3NzM3NjEzNjQsImV4cCI6MTc3Mzc2MjI2NH0.OpwYKm8zzNmUusyw6XV8uwweJMnAaB4VHzX5_sKtGCM
+@refresh = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OWI5NzI1Zjg1ODdkMTZlMDdlZGFmOGYiLCJlbWFpbCI6InRlc3RicmVlZGVyQGV4YW1wbGUuY29tIiwidXNlcm5hbWUiOiJ0ZXN0YnJlZWRlciIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNzczNzYxMzY0LCJleHAiOjE3NzYzNTMzNjR9.kH2FCk92FRPwrgC2HL-faBVxxBWCk6gibUIZVpJxHYc
+
+@seasonId  = 69b97456b1667c3d3489eaf4
+@matingId1 = 69b974d5b1667c3d3489eafc
+@matingId2 = 69b974dfb1667c3d3489eb04
+@matingId3 = 69b974e2b1667c3d3489eb0a
+@matingId4 = 69b974e9b1667c3d3489eb13
+@matingId5 = 69b97558b1667c3d3489eb4c
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 0 — HEALTH CHECK
+# Expected: { "status": "ok", "timestamp": "..." }
+# ════════════════════════════════════════════════════════════════════
+
+GET {{base}}/health
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 1 — AUTH
+# ════════════════════════════════════════════════════════════════════
+
+# 1a. REGISTER — creates a new breeder account
+# Expected: 201 { accessToken, refreshToken, user: { _id, username, email, isBreeder: true } }
+# ACTION: copy accessToken → @access, refreshToken → @refresh
+
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testbreeder",
+  "email": "testbreeder@example.com",
+  "password": "password123",
+  "isBreeder": true
+}
+
+
+###
+# 1b. REGISTER DUPLICATE — should conflict
+# Expected: 409 { error: "Conflict", message: "email is already taken" }
+
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testbreeder2",
+  "email": "testbreeder@example.com",
+  "password": "password123"
+}
+
+
+###
+# 1c. REGISTER VALIDATION — bad username (uppercase)
+# Expected: 400 { error: "Bad Request", message: "Validation failed" }
+
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "TestBreeder",
+  "email": "other@example.com",
+  "password": "password123"
+}
+
+
+###
+# 1d. LOGIN
+# Expected: 200 { accessToken, refreshToken, user: { username, email } }
+# ACTION: update @access and @refresh with the new tokens if needed
+
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testbreeder@example.com",
+  "password": "password123"
+}
+
+
+###
+# 1e. LOGIN — wrong password
+# Expected: 401 { error: "Unauthorized", message: "Invalid credentials" }
+
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testbreeder@example.com",
+  "password": "wrongpassword"
+}
+
+
+###
+# 1f. GET /me — returns current user from JWT
+# Expected: 200 { _id, username, email, isBreeder: true, ... }
+
+GET {{base}}/api/auth/me
+Authorization: Bearer {{access}}
+
+
+###
+# 1g. GET /me — no token
+# Expected: 401 { error: "Unauthorized" }
+
+GET {{base}}/api/auth/me
+
+
+###
+# 1h. REFRESH — issue new access token
+# Expected: 200 { accessToken, refreshToken }
+# ACTION: update @access and @refresh with the new values
+
+POST {{base}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refresh}}"
+}
+
+
+###
+# 1i. LOGOUT — invalidates the refresh token
+# Expected: 200 { message: "Logged out successfully" }
+
+POST {{base}}/api/auth/logout
+Authorization: Bearer {{access}}
+
+
+###
+# 1j. REFRESH after logout — should fail
+# Expected: 401 { error: "Unauthorized", message: "Session not found" } or "Refresh token mismatch"
+
+POST {{base}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refresh}}"
+}
+
+
+###
+# ── Re-login to get fresh tokens for the rest of the tests ──────────
+# Expected: 200 { accessToken, refreshToken }
+# ACTION: update @access and @refresh
+
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testbreeder@example.com",
+  "password": "password123"
+}
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 2 — SEASONS
+# ════════════════════════════════════════════════════════════════════
+
+# 2a. CREATE SEASON
+# Expected: 201 { _id, name: "Local", year: 2025, markingsGenerated: false }
+# ACTION: copy _id → @seasonId
+
+POST {{base}}/api/seasons
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "name": "Local",
+  "year": 2025
+}
+
+
+###
+# 2b. CREATE SEASON — custom name
+# Expected: 201 { _id, name: "My Custom Season", ... }
+
+POST {{base}}/api/seasons
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "name": "My Custom Season",
+  "year": 2025
+}
+
+
+###
+# 2c. LIST SEASONS
+# Expected: 200 [ { _id, name, year, markingsGenerated }, ... ] — most recent first
+
+GET {{base}}/api/seasons
+Authorization: Bearer {{access}}
+
+
+###
+# 2d. GET SINGLE SEASON
+# Expected: 200 { _id, name: "Local", year: 2025, markingsGenerated: false }
+
+GET {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access}}
+
+
+###
+# 2e. GET SEASON — wrong user (no token)
+# Expected: 401
+
+GET {{base}}/api/seasons/{{seasonId}}
+
+
+###
+# 2f. PATCH SEASON — rename it
+# Expected: 200 { _id, name: "Local Updated", ... }
+
+PATCH {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "name": "Local Updated"
+}
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 3 — MATINGS  (add 5 to test overflow logic)
+# ════════════════════════════════════════════════════════════════════
+
+# 3a. MATING 1 — 5 hens, diff marking
+# Expected: 201 { _id, maleName: "Raptor Sweater", hens: [5 hens, all marking: null] }
+# ACTION: copy _id → @matingId1
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Raptor Sweater",
+  "henCount": 5,
+  "henNames": ["Hen A", "Hen B", "Hen C", "Hen D", "Hen E"],
+  "sameMarking": false,
+  "mandatoryMarking": null
+}
+
+
+###
+# 3b. MATING 2 — 3 hens, same marking
+# Expected: 201 { _id, maleName: "Grey Lemon", sameMarking: true }
+# ACTION: copy _id → @matingId2
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Grey Lemon",
+  "henCount": 3,
+  "henNames": ["Hen F", "Hen G", "Hen H"],
+  "sameMarking": true,
+  "mandatoryMarking": null
+}
+
+
+###
+# 3c. MATING 3 — single hen (sameMarking should be stored as null)
+# Expected: 201 { _id, maleName: "Hatch", sameMarking: null, hens: [1 hen] }
+# ACTION: copy _id → @matingId3
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Hatch",
+  "henCount": 1,
+  "henNames": ["Solo Hen"],
+  "sameMarking": null,
+  "mandatoryMarking": null
+}
+
+
+###
+# 3d. MATING 4 — with mandatory marking
+# Expected: 201 { _id, maleName: "Kelso", mandatoryMarking: "NONE-OO-II" → should be "OO-II" }
+# NOTE: OO-II is a feet-only valid combo → nose group NONE
+# ACTION: copy _id → @matingId4
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Kelso",
+  "henCount": 2,
+  "henNames": ["Hen I", "Hen J"],
+  "sameMarking": false,
+  "mandatoryMarking": "OO-II"
+}
+
+
+###
+# 3e. MATING 5 — overflow mating (5th mating, all 4 groups already taken)
+# Expected: 201 { _id, maleName: "Claret" }
+# ACTION: copy _id → @matingId5
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Claret",
+  "henCount": 2,
+  "henNames": ["Hen K", "Hen L"],
+  "sameMarking": false,
+  "mandatoryMarking": null
+}
+
+
+###
+# 3f. MATING — invalid mandatory marking
+# Expected: 400 { error: "Bad Request", message: "... is not a valid marking combination" }
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Invalid Male",
+  "henCount": 1,
+  "henNames": ["Hen X"],
+  "sameMarking": null,
+  "mandatoryMarking": "LO-DL"
+}
+
+
+###
+# 3g. MATING — henNames count mismatch
+# Expected: 400 { message: "henNames must have exactly 3 entries" }
+
+POST {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Bad Male",
+  "henCount": 3,
+  "henNames": ["Only One"],
+  "sameMarking": false,
+  "mandatoryMarking": null
+}
+
+
+###
+# 3h. LIST MATINGS
+# Expected: 200 [ 5 matings in creation order, all marking: null ]
+
+GET {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+
+
+###
+# 3i. GET SINGLE MATING
+# Expected: 200 { _id, maleName: "Raptor Sweater", hens: [5 hens] }
+
+GET {{base}}/api/seasons/{{seasonId}}/matings/{{matingId1}}
+Authorization: Bearer {{access}}
+
+
+###
+# 3j. PATCH MATING — rename the male
+# Expected: 200 { maleName: "Raptor Sweater Updated" }
+
+PATCH {{base}}/api/seasons/{{seasonId}}/matings/{{matingId1}}
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "maleName": "Raptor Sweater Updated"
+}
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 4 — GENERATE MARKINGS
+# ════════════════════════════════════════════════════════════════════
+
+# 4a. GENERATE PREVIEW
+# Expected: 200 { preview: [ { matingId, maleName, noseGroup, hens: [{ henName, marking }] }, ... ] }
+# Check:
+#   - Mating 1 (Raptor) → noseGroup: "LN", 5 different LN-* combos
+#   - Mating 2 (Grey Lemon) → noseGroup: "RN", all 3 hens same RN-* combo
+#   - Mating 3 (Hatch) → noseGroup: "DN", 1 DN-* combo
+#   - Mating 4 (Kelso) → noseGroup: "NONE", mandatory hen gets "OO-II"
+#   - Mating 5 (Claret) → overflow — borrows from the group with most remaining combos
+
+POST {{base}}/api/seasons/{{seasonId}}/generate
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{}
+
+
+###
+# 4b. GENERATE PREVIEW — with mandatory override
+# Mating 3 (Hatch) gets forced to DN-LO instead of the auto-assigned DN combo
+# Expected: 200 { preview: [..., { matingId: "{{matingId3}}", hens: [{ marking: "DN-LO" }] }, ...] }
+
+POST {{base}}/api/seasons/{{seasonId}}/generate
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "overrides": [
+    { "matingId": "{{matingId3}}", "marking": "DN-LO" }
+  ]
+}
+
+
+###
+# 4c. SWAP — test that a single swap is accepted
+# Expected: 200 { matingId, henName, newMarking, message: "Swap accepted — call /confirm to persist" }
+
+POST {{base}}/api/seasons/{{seasonId}}/generate/swap
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "matingId": "{{matingId1}}",
+  "henName": "Hen A",
+  "newMarking": "LN-LO"
+}
+
+
+###
+# 4d. SWAP — invalid combo (LO+DL conflict)
+# Expected: 400 { error: "Bad Request" }
+
+POST {{base}}/api/seasons/{{seasonId}}/generate/swap
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "matingId": "{{matingId1}}",
+  "henName": "Hen A",
+  "newMarking": "LO-DL"
+}
+
+
+###
+# 4e. CONFIRM — save a full valid assignment
+# IMPORTANT: copy the actual matingIds and markings from the 4a preview response above
+# The example below uses placeholder structure — replace with real values from 4a
+#
+# Expected: 200 { message: "Markings confirmed and saved" }
+# After this: GET /matings should show each hen with its marking filled in
+
+POST {{base}}/api/seasons/{{seasonId}}/generate/confirm
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "assignments": [
+    {
+      "matingId": "{{matingId1}}",
+      "noseGroup": "LN",
+      "hens": [
+        { "henName": "Hen A", "marking": "LN-LO" },
+        { "henName": "Hen B", "marking": "LN-RI" },
+        { "henName": "Hen C", "marking": "LN-DL" },
+        { "henName": "Hen D", "marking": "LN-RO" },
+        { "henName": "Hen E", "marking": "LN-DR" }
+      ]
+    },
+    {
+      "matingId": "{{matingId2}}",
+      "noseGroup": "RN",
+      "hens": [
+        { "henName": "Hen F", "marking": "RN-LO" },
+        { "henName": "Hen G", "marking": "RN-LO" },
+        { "henName": "Hen H", "marking": "RN-LO" }
+      ]
+    },
+    {
+      "matingId": "{{matingId3}}",
+      "noseGroup": "DN",
+      "hens": [
+        { "henName": "Solo Hen", "marking": "DN-LO" }
+      ]
+    },
+    {
+      "matingId": "{{matingId4}}",
+      "noseGroup": "NONE",
+      "hens": [
+        { "henName": "Hen I", "marking": "OO-II" },
+        { "henName": "Hen J", "marking": "DL-DR" }
+      ]
+    },
+    {
+      "matingId": "{{matingId5}}",
+      "noseGroup": "LN",
+      "hens": [
+        { "henName": "Hen K", "marking": "LN-RI-DL" },
+        { "henName": "Hen L", "marking": "LN-LI-DR" }
+      ]
+    }
+  ]
+}
+
+
+###
+# 4f. VERIFY — list matings after confirm
+# Expected: each hen now has a marking string (not null)
+# Season.markingsGenerated should be true
+
+GET {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+
+
+###
+# 4g. VERIFY — get season after confirm
+# Expected: { markingsGenerated: true, generatedAt: "2025-..." }
+
+GET {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access}}
+
+
+###
+# 4h. RESET MARKINGS
+# Expected: 200 { message: "Markings reset" }
+# After this: matings show marking: null, season shows markingsGenerated: false
+
+DELETE {{base}}/api/seasons/{{seasonId}}/generate
+Authorization: Bearer {{access}}
+
+
+###
+# 4i. VERIFY RESET — list matings
+# Expected: all hen markings back to null, noseGroup: null
+
+GET {{base}}/api/seasons/{{seasonId}}/matings
+Authorization: Bearer {{access}}
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 5 — CLEANUP / DELETE
+# ════════════════════════════════════════════════════════════════════
+
+# 5a. DELETE a single mating
+# Expected: 200 { message: "Mating deleted" }
+
+DELETE {{base}}/api/seasons/{{seasonId}}/matings/{{matingId5}}
+Authorization: Bearer {{access}}
+
+
+###
+# 5b. DELETE the season (cascades to all matings + marking pool)
+# Expected: 200 { message: "Season deleted" }
+
+DELETE {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access}}
+
+
+###
+# 5c. VERIFY season is gone
+# Expected: 404
+
+GET {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access}}
+
+
+###
+# ════════════════════════════════════════════════════════════════════
+# 6 — PRIVACY CHECK (create a second user, verify data isolation)
+# ════════════════════════════════════════════════════════════════════
+
+# 6a. Register second user
+
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "otheruser",
+  "email": "otheruser@example.com",
+  "password": "password123"
+}
+
+
+###
+# 6b. List seasons as second user — should return empty array []
+
+# ACTION: paste the second user's accessToken below
+@access2 = PASTE_SECOND_USER_TOKEN_HERE
+
+GET {{base}}/api/seasons
+Authorization: Bearer {{access2}}
+
+
+###
+# 6c. Try to access first user's season directly — should return 404 (not 403)
+# This confirms the privacy rule: other users' data is invisible, not forbidden
+
+GET {{base}}/api/seasons/{{seasonId}}
+Authorization: Bearer {{access2}}

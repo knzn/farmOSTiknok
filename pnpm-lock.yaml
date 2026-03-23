@@ -120,6 +120,9 @@ importers:
       expo-image-picker:
         specifier: ~17.0.10
         version: 17.0.10(expo@54.0.33)
+      expo-media-library:
+        specifier: ^55.0.10
+        version: 55.0.10(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
       expo-router:
         specifier: ~6.0.23
         version: 6.0.23(@expo/metro-runtime@6.1.2)(@types/react@19.1.17)(expo-constants@55.0.7)(expo-linking@55.0.7)(expo@54.0.33)(react-dom@18.3.1(react@19.1.0))(react-native-gesture-handler@2.28.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-reanimated@4.1.1(@babel/core@7.29.0)(react-native-worklets@0.5.1(@babel/core@7.29.0)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-safe-area-context@5.7.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native-screens@4.16.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -3233,6 +3236,12 @@ packages:
     resolution: {integrity: sha512-MiGCedere1vzQTEi2aGrkzd7eh/rPSz4w6F3GMBuAJzYl+/0VhIuyhozpEGrueyDIXWfzaUVOcn3SfxVi+kwQQ==}
     peerDependencies:
       react: '*'
+      react-native: '*'
+
+  expo-media-library@55.0.10:
+    resolution: {integrity: sha512-xXmz8Do9BJSt1LrkC6r8l2HAXNdaAr2TdzCuiVo9u47Vuo54twlOgzLpdx4rIzODy/cclqbYb2tae4nCKHJLbw==}
+    peerDependencies:
+      expo: '*'
       react-native: '*'
 
   expo-modules-autolinking@3.0.24:
@@ -9189,6 +9198,11 @@ snapshots:
       - expo
       - supports-color
       - typescript
+
+  expo-media-library@55.0.10(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
+    dependencies:
+      expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@15.8.0)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
 
   expo-modules-autolinking@3.0.24:
     dependencies:

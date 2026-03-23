@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router'
 import { captureRef } from 'react-native-view-shot'
-import * as Sharing from 'expo-sharing'
+import * as MediaLibrary from 'expo-media-library'
 import SimpleBottomSheet, {
   BottomSheetScrollView,
   type SimpleBottomSheetRef,
@@ -266,14 +266,24 @@ export default function SeasonScreen() {
     setSeason(s)
   }
 
+  async function saveCardToGallery(ref: React.RefObject<View>, label: string) {
+    const { status } = await MediaLibrary.requestPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to your photo library to save markings.')
+      return
+    }
+    const uri = await captureRef(ref, { format: 'png', quality: 1 })
+    await MediaLibrary.saveToLibraryAsync(uri)
+    Alert.alert('Saved!', `${label} saved to your Photos.`)
+  }
+
   async function handleShareSeason() {
     if (!seasonCardRef.current) return
     setSharing(true)
     try {
-      const uri = await captureRef(seasonCardRef, { format: 'png', quality: 1 })
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Markings' })
+      await saveCardToGallery(seasonCardRef, 'Markings card')
     } catch {
-      Alert.alert('Error', 'Could not capture card. Try again.')
+      Alert.alert('Error', 'Could not save image. Try again.')
     } finally {
       setSharing(false)
     }
@@ -283,10 +293,9 @@ export default function SeasonScreen() {
     if (!matingCardRef.current) return
     setSharingMating(true)
     try {
-      const uri = await captureRef(matingCardRef, { format: 'png', quality: 1 })
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Markings' })
+      await saveCardToGallery(matingCardRef, 'Mating card')
     } catch {
-      Alert.alert('Error', 'Could not capture card. Try again.')
+      Alert.alert('Error', 'Could not save image. Try again.')
     } finally {
       setSharingMating(false)
     }
@@ -453,9 +462,7 @@ export default function SeasonScreen() {
           >
             {sharing
               ? <ActivityIndicator color="#3B82F6" size="small" />
-              : <>
-                  <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Share Markings</Text>
-                </>
+              : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save Markings to Photos</Text>
             }
           </TouchableOpacity>
         )}
@@ -742,7 +749,7 @@ export default function SeasonScreen() {
                 >
                   {sharingMating
                     ? <ActivityIndicator color="#3B82F6" size="small" />
-                    : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Share This Mating</Text>
+                    : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save to Photos</Text>
                   }
                 </TouchableOpacity>
               )}

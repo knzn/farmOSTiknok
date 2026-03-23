@@ -39,6 +39,7 @@
       ],
       "expo-secure-store",
       "expo-video",
+      "expo-media-library",
       [
         "expo-build-properties",
         {

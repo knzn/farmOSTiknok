@@ -91,7 +91,7 @@ export default function MarkingGeneratorPage() {
     try {
       const result = await apiRequest(`/seasons/${optionsSeason._id}/duplicate`, { method: 'POST' }) as DuplicateResult
       setSeasons(prev => [result.season, ...prev])
-      setExpandedYears(prev => new Set<number>([...prev, currentYear]))
+      setExpandedYears(prev => new Set<number>(Array.from(prev).concat(currentYear)))
       setOptionsSeason(null)
       router.push(`/breeder/marking-generator/${result.season._id}`)
     } catch (e) {

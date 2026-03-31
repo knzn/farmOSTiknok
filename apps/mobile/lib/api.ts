@@ -1,4 +1,5 @@
 import { useAuthStore } from '../stores/auth'
+import { usePaywallStore } from '../stores/paywall'
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api'
 
@@ -64,10 +65,36 @@ export async function apiRequest<T>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}))
+    const code    = (error as { code?: string }).code
     const message = (error as { message?: string }).message || `HTTP ${res.status}`
+
+    if (res.status === 403 && code === 'SUBSCRIPTION_REQUIRED') {
+      usePaywallStore.getState().show('expired')
+    } else if (res.status === 403 && code === 'ACCOUNT_SUSPENDED') {
+      usePaywallStore.getState().show('suspended')
+    }
+
     throw new Error(message)
   }
 
   if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+export async function apiUpload<T>(path: string, fileUri: string): Promise<T> {
+  const authToken = useAuthStore.getState().accessToken
+  const formData = new FormData()
+  formData.append('file', { uri: fileUri, name: 'photo.jpg', type: 'image/jpeg' } as any)
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}))
+    throw new Error((error as { message?: string }).message || `HTTP ${res.status}`)
+  }
   return res.json() as Promise<T>
 }

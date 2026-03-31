@@ -3,8 +3,11 @@ import { Stack, useRouter, useSegments } from 'expo-router'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
-import { View, Text } from 'react-native'
+import { View, Text, Image } from 'react-native'
 import { useAuthStore } from '../stores/auth'
+import { ToastOverlay } from '../components/ToastOverlay'
+import { PaywallModal } from '../components/PaywallModal'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 function AuthGuard() {
   const { accessToken, hydrated } = useAuthStore()
@@ -29,10 +32,16 @@ function AuthGuard() {
 function SplashScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: '#C8A84B', fontSize: 56, fontWeight: '800', letterSpacing: -1 }}>T</Text>
-      <Text style={{ color: '#C8A84B', fontSize: 16, fontWeight: '600', letterSpacing: 4, marginTop: 4 }}>
-        TIKNOK
-      </Text>
+      <Image
+        source={require('../assets/symbol.png')}
+        style={{ width: 160, height: 160 }}
+        resizeMode="contain"
+      />
+      <Image
+        source={require('../assets/wordmark.png')}
+        style={{ width: 220, height: 60, marginTop: 24 }}
+        resizeMode="contain"
+      />
     </View>
   )
 }
@@ -40,6 +49,7 @@ function SplashScreen() {
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate)
   const hydrated = useAuthStore((s) => s.hydrated)
+  usePushNotifications()
 
   useEffect(() => {
     hydrate()
@@ -55,6 +65,8 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
       </Stack>
+      <ToastOverlay />
+      <PaywallModal />
     </GestureHandlerRootView>
   )
 }

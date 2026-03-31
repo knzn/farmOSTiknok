@@ -27,7 +27,7 @@ type MatingRow = {
   _id: string
   maleName: string
   sameMarking: boolean | null
-  hens: { henName: string }[]
+  hens: { henName: string; previousMarking: string | null }[]
   override: string | null
 }
 
@@ -47,8 +47,12 @@ export default function GenerateMarkingsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [expandedOverride, setExpandedOverride] = useState<string | null>(null)
 
-  const [swapTarget, setSwapTarget] = useState<{ matingId: string; henName: string } | null>(null)
+  const [swapTarget, setSwapTarget] = useState<{ matingId: string; henName: string; henIdx: number } | null>(null)
   const [swapMarking, setSwapMarking] = useState<string | null>(null)
+
+  // previousMarkings: matingId → { [henName]: previousMarking }
+  const [previousMarkingsMap, setPreviousMarkingsMap] = useState<Record<string, Record<string, string>>>({})
+  const hasPreviousMarkings = Object.keys(previousMarkingsMap).length > 0
 
   useEffect(() => {
     loadMatings()
@@ -57,14 +61,37 @@ export default function GenerateMarkingsScreen() {
   async function loadMatings() {
     try {
       const matings = await apiRequest<MatingRow[]>(`/seasons/${seasonId}/matings`)
+
+      // Build previousMarkings map
+      const prevMap: Record<string, Record<string, string>> = {}
+      for (const m of matings) {
+        const henMap: Record<string, string> = {}
+        for (const h of m.hens) {
+          if (h.previousMarking) henMap[h.henName] = h.previousMarking
+        }
+        if (Object.keys(henMap).length > 0) prevMap[m._id] = henMap
+      }
+      setPreviousMarkingsMap(prevMap)
+
       setMatingRows(
-        matings.map((m) => ({
-          _id: m._id,
-          maleName: m.maleName,
-          sameMarking: m.sameMarking,
-          hens: m.hens,
-          override: null,
-        })),
+        matings.map((m) => {
+          // For same-marking matings: if all hens had the same previousMarking, auto-suggest it as override
+          let suggestedOverride: string | null = null
+          if (m.sameMarking !== false && m.hens.length > 0) {
+            const prevMarks = m.hens.map((h) => h.previousMarking).filter(Boolean) as string[]
+            const unique = [...new Set(prevMarks)]
+            if (unique.length === 1 && prevMarks.length === m.hens.length) {
+              suggestedOverride = unique[0]
+            }
+          }
+          return {
+            _id: m._id,
+            maleName: m.maleName,
+            sameMarking: m.sameMarking,
+            hens: m.hens,
+            override: suggestedOverride,
+          }
+        }),
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load matings')
@@ -115,8 +142,8 @@ export default function GenerateMarkingsScreen() {
     }
   }
 
-  function openSwap(matingId: string, henName: string, currentMarking: string) {
-    setSwapTarget({ matingId, henName })
+  function openSwap(matingId: string, henName: string, henIdx: number, currentMarking: string) {
+    setSwapTarget({ matingId, henName, henIdx })
     setSwapMarking(currentMarking)
     swapSheetRef.current?.expand()
   }
@@ -128,8 +155,8 @@ export default function GenerateMarkingsScreen() {
         a.matingId === swapTarget.matingId
           ? {
               ...a,
-              hens: a.hens.map((h) =>
-                h.henName === swapTarget.henName ? { ...h, marking: swapMarking } : h,
+              hens: a.hens.map((h, i) =>
+                i === swapTarget.henIdx ? { ...h, marking: swapMarking } : h,
               ),
             }
           : a,
@@ -163,6 +190,20 @@ export default function GenerateMarkingsScreen() {
             Optionally pre-assign a mandatory marking per mating, then generate.
           </Text>
 
+          {hasPreviousMarkings && (
+            <View style={{ backgroundColor: '#C8A84B15', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#C8A84B40', flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+              <Text style={{ fontSize: 18 }}>💡</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#C8A84B', fontSize: 14, fontWeight: '700', marginBottom: 2 }}>
+                  Previous season markings found
+                </Text>
+                <Text style={{ color: '#A0A0A0', fontSize: 12, lineHeight: 17 }}>
+                  Same-marking matings have been pre-filled with last season's markings. You can clear or change them below before generating.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {matingRows.map((row) => (
             <View
               key={row._id}
@@ -174,6 +215,9 @@ export default function GenerateMarkingsScreen() {
                   <Text className="text-ink-2 text-xs mt-0.5">
                     {row.hens.length} hen{row.hens.length !== 1 ? 's' : ''}
                     {row.sameMarking !== null ? (row.sameMarking ? ' · Same' : ' · Diff') : ''}
+                    {previousMarkingsMap[row._id] && !row.override && (
+                      <Text style={{ color: '#C8A84B' }}>{' · has prev marks'}</Text>
+                    )}
                   </Text>
                 </View>
                 <View className="flex-row items-center gap-3">
@@ -260,23 +304,31 @@ export default function GenerateMarkingsScreen() {
                   </View>
                 </View>
 
-                {a.hens.map((hen) => (
-                  <View
-                    key={hen.henName}
-                    className="px-4 py-2.5 flex-row items-center justify-between border-b border-rim last:border-b-0"
-                  >
-                    <Text className="text-ink-2 text-sm flex-1">{hen.henName}</Text>
-                    <View className="flex-row items-center gap-3">
-                      <Text className="text-secondary font-bold text-base">{hen.marking}</Text>
-                      <TouchableOpacity
-                        className="bg-canvas rounded-lg px-2 py-1 border border-rim"
-                        onPress={() => openSwap(a.matingId, hen.henName, hen.marking)}
-                      >
-                        <Text className="text-ink-2 text-xs">swap</Text>
-                      </TouchableOpacity>
+                {a.hens.map((hen, hIdx) => {
+                  const prev = previousMarkingsMap[a.matingId]?.[hen.henName]
+                  return (
+                    <View
+                      key={hIdx}
+                      className="px-4 py-2.5 flex-row items-center justify-between border-b border-rim last:border-b-0"
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text className="text-ink-2 text-sm">{hen.henName}</Text>
+                        {prev && prev !== hen.marking && (
+                          <Text style={{ color: '#606060', fontSize: 11, marginTop: 1 }}>prev: {prev}</Text>
+                        )}
+                      </View>
+                      <View className="flex-row items-center gap-3">
+                        <Text className="text-secondary font-bold text-base">{hen.marking}</Text>
+                        <TouchableOpacity
+                          className="bg-canvas rounded-lg px-2 py-1 border border-rim"
+                          onPress={() => openSwap(a.matingId, hen.henName, hIdx, hen.marking)}
+                        >
+                          <Text className="text-ink-2 text-xs">swap</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  )
+                })}
               </View>
             ))}
 
@@ -286,8 +338,11 @@ export default function GenerateMarkingsScreen() {
               </View>
             )}
 
+            <Text className="text-ink-3 text-xs text-center mb-3">
+              Locks markings for this season. You can still edit matings after.
+            </Text>
             <TouchableOpacity
-              className="bg-accent rounded-xl py-4 items-center mt-4 mb-4"
+              className="bg-accent rounded-xl py-4 items-center mb-4"
               onPress={handleConfirm}
               disabled={confirming}
               activeOpacity={0.8}

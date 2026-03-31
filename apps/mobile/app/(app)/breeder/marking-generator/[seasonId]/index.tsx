@@ -7,7 +7,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
+  Image,
 } from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router'
 import { captureRef } from 'react-native-view-shot'
 import * as MediaLibrary from 'expo-media-library'
@@ -17,7 +20,7 @@ import SimpleBottomSheet, {
   type SimpleBottomSheetRef,
 } from '../../../../../components/SimpleBottomSheet'
 import MarkingExportCard, { type SeasonTotals } from '../../../../../components/MarkingExportCard'
-import { apiRequest } from '../../../../../lib/api'
+import { apiRequest, apiUpload } from '../../../../../lib/api'
 
 type Season = {
   _id: string
@@ -32,6 +35,8 @@ type Hen = {
   _id: string
   henName: string
   marking: string | null
+  previousMarking: string | null
+  photo: string | null
   eggsLaid: number | null
   chicksHatched: number | null
   maleCount: number | null
@@ -44,6 +49,7 @@ type Mating = {
   sameMarking: boolean | null
   mandatoryMarking: string | null
   noseGroup: string | null
+  malePhoto: string | null
   hens: Hen[]
   useIndividualHenCount: boolean
   penEggsLaid: number | null
@@ -128,6 +134,10 @@ export default function SeasonScreen() {
   const [editValues, setEditValues] = useState<EditValues>({ eggs: '', hatched: '', males: '', females: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+
+  // Photo viewer
+  const [photoModal, setPhotoModal] = useState<{ uri: string; title: string } | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
 
 
   async function loadData() {
@@ -333,6 +343,86 @@ export default function SeasonScreen() {
     ])
   }
 
+  async function handleKeepPrevious(mating: Mating, prevMarking: string) {
+    try {
+      const updated = await apiRequest<Mating>(
+        `/seasons/${seasonId}/matings/${mating._id}`,
+        { method: 'PATCH', body: { mandatoryMarking: prevMarking } },
+      )
+      setMatings((prev) => prev.map((m) => m._id === updated._id ? updated : m))
+      setSelectedMating(updated)
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to set marking')
+    }
+  }
+
+  async function pickAndUpload(endpoint: string, trackKey: string) {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo library access to upload photos.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    })
+    if (result.canceled) return
+    setUploadingPhoto(trackKey)
+    try {
+      const updated = await apiUpload<Mating>(`/seasons/${seasonId}/${endpoint}`, result.assets[0]!.uri)
+      setMatings((prev) => prev.map((m) => m._id === updated._id ? updated : m))
+      if (selectedMating?._id === updated._id) setSelectedMating(updated)
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message || 'Try again')
+    } finally {
+      setUploadingPhoto(null)
+    }
+  }
+
+  async function handleMalePhotoTap(mating: Mating) {
+    if (mating.malePhoto) {
+      Alert.alert(mating.maleName, 'Photo options', [
+        { text: 'View Photo', onPress: () => setPhotoModal({ uri: mating.malePhoto!, title: mating.maleName }) },
+        { text: 'Change Photo', onPress: () => pickAndUpload(`matings/${mating._id}/photo`, `male_${mating._id}`) },
+        { text: 'Remove Photo', style: 'destructive', onPress: async () => {
+          try {
+            const updated = await apiRequest<Mating>(`/seasons/${seasonId}/matings/${mating._id}/photo`, { method: 'DELETE' })
+            setMatings((prev) => prev.map((m) => m._id === updated._id ? updated : m))
+            if (selectedMating?._id === updated._id) setSelectedMating(updated)
+          } catch (e: any) {
+            Alert.alert('Error', e.message || 'Failed to remove photo')
+          }
+        }},
+        { text: 'Cancel', style: 'cancel' },
+      ])
+    } else {
+      pickAndUpload(`matings/${mating._id}/photo`, `male_${mating._id}`)
+    }
+  }
+
+  async function handleHenPhotoTap(mating: Mating, hen: Hen) {
+    if (hen.photo) {
+      Alert.alert(hen.henName, 'Photo options', [
+        { text: 'View Photo', onPress: () => setPhotoModal({ uri: hen.photo!, title: hen.henName }) },
+        { text: 'Change Photo', onPress: () => pickAndUpload(`matings/${mating._id}/hens/${hen._id}/photo`, `hen_${hen._id}`) },
+        { text: 'Remove Photo', style: 'destructive', onPress: async () => {
+          try {
+            const updated = await apiRequest<Mating>(`/seasons/${seasonId}/matings/${mating._id}/hens/${hen._id}/photo`, { method: 'DELETE' })
+            setMatings((prev) => prev.map((m) => m._id === updated._id ? updated : m))
+            if (selectedMating?._id === updated._id) setSelectedMating(updated)
+          } catch (e: any) {
+            Alert.alert('Error', e.message || 'Failed to remove photo')
+          }
+        }},
+        { text: 'Cancel', style: 'cancel' },
+      ])
+    } else {
+      pickAndUpload(`matings/${mating._id}/hens/${hen._id}/photo`, `hen_${hen._id}`)
+    }
+  }
+
   if (loading) {
     return (
       <View className="flex-1 bg-canvas items-center justify-center">
@@ -422,6 +512,16 @@ export default function SeasonScreen() {
           )
         })()}
 
+        {/* Previous season markings notice */}
+        {!generated && matings.some((m) => m.hens.some((h) => h.previousMarking)) && (
+          <View style={{ backgroundColor: '#C8A84B15', borderRadius: 12, borderWidth: 1, borderColor: '#C8A84B30', padding: 14, marginBottom: 12 }}>
+            <Text style={{ color: '#C8A84B', fontSize: 12, fontWeight: '700', marginBottom: 3 }}>Previous Season Markings</Text>
+            <Text style={{ color: '#A0A0A0', fontSize: 12, lineHeight: 18 }}>
+              This season was copied from a previous one. Each hen had a marking last season — keep it or let TIKNOK assign a new one.
+            </Text>
+          </View>
+        )}
+
         {/* Add Mating + Generate — always visible at top */}
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           <TouchableOpacity
@@ -437,7 +537,7 @@ export default function SeasonScreen() {
               style={{ flex: 1, backgroundColor: generated ? '#141414' : '#C8A84B', borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: generated ? '#F59E0B44' : '#C8A84B' }}
               onPress={() =>
                 generated
-                  ? Alert.alert('Reset Markings', 'Clear all generated markings and regenerate?', [
+                  ? Alert.alert('Reset Markings', 'Clears all generated combos. Your matings and hens are not deleted.', [
                       { text: 'Cancel', style: 'cancel' },
                       {
                         text: 'Reset',
@@ -468,12 +568,15 @@ export default function SeasonScreen() {
           <TouchableOpacity
             onPress={handleShareSeason}
             disabled={saving}
-            style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#3B82F644', marginBottom: 16, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
-            activeOpacity={0.7}
+            style={{ backgroundColor: '#3B82F6', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 16, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+            activeOpacity={0.8}
           >
             {saving
-              ? <ActivityIndicator color="#3B82F6" size="small" />
-              : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save Markings Card</Text>
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <>
+                  <Text style={{ fontSize: 16 }}>🖼</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Save Markings Card</Text>
+                </>
             }
           </TouchableOpacity>
         )}
@@ -492,7 +595,19 @@ export default function SeasonScreen() {
                 onPress={() => openMatingDetail(m)}
                 activeOpacity={0.7}
               >
-                <Text className="text-ink font-semibold text-sm" numberOfLines={2}>{m.maleName}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <Text className="text-ink font-semibold text-sm flex-1 mr-1" numberOfLines={2}>{m.maleName}</Text>
+                  <TouchableOpacity
+                    onPress={(e) => { e.stopPropagation(); handleMalePhotoTap(m) }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    {m.malePhoto ? (
+                      <Image source={{ uri: m.malePhoto }} style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#C8A84B' }} />
+                    ) : (
+                      <Text style={{ fontSize: 16, opacity: uploadingPhoto === `male_${m._id}` ? 0.4 : 0.35 }}>📷</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
                 <Text className="text-ink-2 text-xs mt-1">
                   {m.hens.length} hen{m.hens.length !== 1 ? 's' : ''}
                   {m.sameMarking !== null ? (m.sameMarking ? ' · Same' : ' · Diff') : ''}
@@ -562,7 +677,10 @@ export default function SeasonScreen() {
         handleIndicatorStyle={{ backgroundColor: '#A1A1AA' }}
       >
         {selectedMating && sheetMode === 'edit' && editTarget && (
-          <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 }}>
+          <BottomSheetScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 220 }}
+          >
             {/* Back link */}
             <TouchableOpacity onPress={() => { setSheetMode('detail'); setEditError(null) }} style={{ marginBottom: 16 }}>
               <Text style={{ color: '#C8A84B', fontSize: 14 }}>‹ Back</Text>
@@ -612,7 +730,7 @@ export default function SeasonScreen() {
                 : <Text style={{ color: '#000000', fontSize: 16, fontWeight: '700' }}>Save</Text>
               }
             </TouchableOpacity>
-          </View>
+          </BottomSheetScrollView>
         )}
 
         {selectedMating && sheetMode === 'detail' && (
@@ -620,7 +738,18 @@ export default function SeasonScreen() {
             <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 }}>
               {/* Sheet header row */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text className="text-ink text-2xl font-bold flex-1 mr-3" numberOfLines={1}>{selectedMating.maleName}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+                  <TouchableOpacity onPress={() => handleMalePhotoTap(selectedMating)} activeOpacity={0.7}>
+                    {selectedMating.malePhoto ? (
+                      <Image source={{ uri: selectedMating.malePhoto }} style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: '#C8A84B' }} />
+                    ) : (
+                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 20 }}>📷</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <Text className="text-ink text-2xl font-bold flex-1" numberOfLines={1}>{selectedMating.maleName}</Text>
+                </View>
                 <TouchableOpacity
                   onPress={() => detailSheetRef.current?.close()}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -642,16 +771,30 @@ export default function SeasonScreen() {
                     </Text>
                   </View>
                 )}
-                {selectedMating.noseGroup && (
-                  <View className="bg-secondary-muted rounded-full px-3 py-1">
-                    <Text className="text-secondary text-xs font-semibold">{selectedMating.noseGroup}</Text>
-                  </View>
-                )}
               </View>
+
+              {/* Keep previous marking — same-marking matings only, before generation */}
+              {!generated && selectedMating.sameMarking && !selectedMating.mandatoryMarking &&
+               selectedMating.hens.some((h) => h.previousMarking) && (() => {
+                const prev = selectedMating.hens.find((h) => h.previousMarking)?.previousMarking
+                if (!prev) return null
+                return (
+                  <TouchableOpacity
+                    onPress={() => handleKeepPrevious(selectedMating, prev)}
+                    style={{ backgroundColor: '#C8A84B15', borderRadius: 10, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#C8A84B30', flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ color: '#C8A84B', fontSize: 13, flex: 1 }}>
+                      Keep previous marking: <Text style={{ fontWeight: '700' }}>{prev}</Text>
+                    </Text>
+                    <Text style={{ color: '#C8A84B', fontSize: 12 }}>Set ›</Text>
+                  </TouchableOpacity>
+                )
+              })()}
 
               {selectedMating.mandatoryMarking && (
                 <View className="bg-canvas rounded-xl px-4 py-3 mb-4 border border-rim">
-                  <Text className="text-ink-2 text-xs mb-1">Mandatory marking</Text>
+                  <Text className="text-ink-2 text-xs mb-1">Force Marking</Text>
                   <Text className="text-secondary font-bold text-lg">{selectedMating.mandatoryMarking}</Text>
                 </View>
               )}
@@ -673,7 +816,20 @@ export default function SeasonScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: '#606060', fontSize: 11 }}>Hen {idx + 1}</Text>
                           <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 14 }}>{hen.henName}</Text>
+                          {!hen.marking && hen.previousMarking && (
+                            <Text style={{ color: '#606060', fontSize: 10, marginTop: 1 }}>prev: {hen.previousMarking}</Text>
+                          )}
                         </View>
+                        <TouchableOpacity
+                          onPress={() => handleHenPhotoTap(selectedMating, hen)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          {hen.photo ? (
+                            <Image source={{ uri: hen.photo }} style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: '#C8A84B' }} />
+                          ) : (
+                            <Text style={{ fontSize: 14, opacity: uploadingPhoto === `hen_${hen._id}` ? 0.4 : 0.25 }}>📷</Text>
+                          )}
+                        </TouchableOpacity>
                         {hen.marking && (
                           <View style={{ backgroundColor: '#C8A84B22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
                             <Text style={{ color: '#C8A84B', fontSize: 12, fontWeight: '700' }}>{hen.marking}</Text>
@@ -702,11 +858,24 @@ export default function SeasonScreen() {
                   <Text className="text-ink-2 text-xs font-semibold uppercase tracking-wider mb-2">Hens</Text>
                   <View style={{ gap: 8, marginBottom: 16 }}>
                     {selectedMating.hens.map((hen, idx) => (
-                      <View key={hen._id} style={{ backgroundColor: '#0F0F11', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: '#27272A', flexDirection: 'row', alignItems: 'center' }}>
+                      <View key={hen._id} style={{ backgroundColor: '#0F0F11', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: '#27272A', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: '#606060', fontSize: 11 }}>Hen {idx + 1}</Text>
                           <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{hen.henName}</Text>
+                          {!hen.marking && hen.previousMarking && (
+                            <Text style={{ color: '#606060', fontSize: 10, marginTop: 1 }}>prev: {hen.previousMarking}</Text>
+                          )}
                         </View>
+                        <TouchableOpacity
+                          onPress={() => handleHenPhotoTap(selectedMating, hen)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          {hen.photo ? (
+                            <Image source={{ uri: hen.photo }} style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: '#C8A84B' }} />
+                          ) : (
+                            <Text style={{ fontSize: 14, opacity: uploadingPhoto === `hen_${hen._id}` ? 0.4 : 0.25 }}>📷</Text>
+                          )}
+                        </TouchableOpacity>
                         {hen.marking && (
                           <View style={{ backgroundColor: '#C8A84B22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
                             <Text style={{ color: '#C8A84B', fontSize: 12, fontWeight: '700' }}>{hen.marking}</Text>
@@ -754,13 +923,17 @@ export default function SeasonScreen() {
               {/* Share button — only if mating has markings */}
               {selectedMating.hens.some((h) => h.marking) && (
                 <TouchableOpacity
-                  style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#3B82F644' }}
+                  style={{ backgroundColor: '#3B82F6', borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
                   onPress={handleShareMating}
                   disabled={saving}
+                  activeOpacity={0.8}
                 >
-                  {savingMating
-                    ? <ActivityIndicator color="#3B82F6" size="small" />
-                    : <Text style={{ color: '#3B82F6', fontWeight: '600', fontSize: 14 }}>Save to Photos</Text>
+                  {saving
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <>
+                        <Text style={{ fontSize: 15 }}>🖼</Text>
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Save to Photos</Text>
+                      </>
                   }
                 </TouchableOpacity>
               )}
@@ -799,7 +972,7 @@ export default function SeasonScreen() {
         backgroundStyle={{ backgroundColor: '#18181B' }}
         handleIndicatorStyle={{ backgroundColor: '#A1A1AA' }}
       >
-        <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 }}>
+        <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 120 }}>
           <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Customize Card</Text>
           <Text style={{ color: '#606060', fontSize: 13, marginBottom: 20 }}>These details will appear on the saved image.</Text>
 
@@ -879,6 +1052,33 @@ export default function SeasonScreen() {
           mating={selectedMating}
         />
       )}
+
+      {/* Full-screen photo modal */}
+      <Modal
+        visible={photoModal !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoModal(null)}
+        statusBarTranslucent
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => setPhotoModal(null)}
+          activeOpacity={1}
+        >
+          {photoModal && (
+            <>
+              <Text style={{ color: '#A0A0A0', fontSize: 13, marginBottom: 14 }}>{photoModal.title}</Text>
+              <Image
+                source={{ uri: photoModal.uri }}
+                style={{ width: 300, height: 300, borderRadius: 16 }}
+                resizeMode="contain"
+              />
+              <Text style={{ color: '#606060', fontSize: 12, marginTop: 20 }}>Tap anywhere to close</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </Modal>
     </View>
   )
 }

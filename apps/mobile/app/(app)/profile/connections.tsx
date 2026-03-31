@@ -83,7 +83,6 @@ export default function ConnectionsScreen() {
         <FlashList
           data={users}
           keyExtractor={(item) => item.id}
-          estimatedItemSize={68}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
           renderItem={({ item }) => (
             <View className="flex-row items-center py-3 border-b border-rim">

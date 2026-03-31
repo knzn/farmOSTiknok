@@ -70,13 +70,16 @@ export function generateMarkings(
 
     const effectiveGroup = getNoseGroup(mandatory)
 
-    // Claim the group
+    // Check for duplicate combo (real conflict)
+    if (usedCombos.has(mandatory)) {
+      throw new Error(
+        `Conflict: marking ${mandatory} is already assigned to another mating`,
+      )
+    }
+
+    // Multiple mandatory matings can share a nose group — claim only if unclaimed
     if (!noseGroupOwner.has(effectiveGroup)) {
       noseGroupOwner.set(effectiveGroup, mating.id)
-    } else if (noseGroupOwner.get(effectiveGroup) !== mating.id) {
-      throw new Error(
-        `Conflict: nose group ${effectiveGroup} already claimed by another mating`,
-      )
     }
 
     usedCombos.add(mandatory)

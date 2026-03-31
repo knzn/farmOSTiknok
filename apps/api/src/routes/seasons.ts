@@ -38,6 +38,13 @@ export default async function seasonRoutes(fastify: FastifyInstance) {
   // All routes require auth
   fastify.addHook('preHandler', fastify.authenticate)
 
+  // Write routes require active subscription
+  fastify.addHook('preHandler', async (req, reply) => {
+    if (['POST', 'PATCH', 'DELETE'].includes(req.method)) {
+      await fastify.requireSubscription(req, reply)
+    }
+  })
+
   // ── POST /api/seasons ─────────────────────────────────────────
   fastify.post('/', async (req, reply) => {
     const input = CreateSeasonInputSchema.parse(req.body)
@@ -618,6 +625,155 @@ export default async function seasonRoutes(fastify: FastifyInstance) {
     })
   })
 
+  // ── POST /api/seasons/:seasonId/duplicate ─────────────────────
+  // Copy a season's matings into a new season (for the current year)
+  fastify.post<{ Params: { seasonId: string } }>('/:seasonId/duplicate', async (req, reply) => {
+    const uid = userId(req)
+    const source = await requireSeason(req.params.seasonId, uid)
+    if (!source) return notFound(reply, 'Season not found')
+
+    const year = new Date().getFullYear()
+    const newSeason = await Season.create({ userId: uid, name: source.name, year })
+
+    const sourceMatings = await Mating.find({ seasonId: source._id, userId: uid }).sort({ createdAt: 1 })
+
+    await Promise.all(
+      sourceMatings.map((m) =>
+        Mating.create({
+          seasonId: newSeason._id,
+          userId: uid,
+          maleName: m.maleName,
+          sameMarking: m.sameMarking,
+          mandatoryMarking: null,
+          hens: m.hens.map((h) => ({
+            henName: h.henName,
+            marking: null,
+            previousMarking: h.marking ?? null,
+          })),
+        }),
+      ),
+    )
+
+    return reply.code(201).send({
+      season: { ...serializeSeason(newSeason), matingCount: sourceMatings.length },
+      sourceSeasonName: source.name,
+      matingsCopied: sourceMatings.length,
+    })
+  })
+
+  // ── POST /api/seasons/:seasonId/matings/:matingId/photo ───────
+  // Upload male photo
+  fastify.post<{ Params: { seasonId: string; matingId: string } }>(
+    '/:seasonId/matings/:matingId/photo',
+    async (req, reply) => {
+      const uid = userId(req)
+      const season = await requireSeason(req.params.seasonId, uid)
+      if (!season) return notFound(reply, 'Season not found')
+
+      const data = await req.file()
+      if (!data) return reply.code(400).send({ error: 'Bad Request', message: 'No file', statusCode: 400 })
+
+      const chunks: Buffer[] = []
+      for await (const chunk of data.file) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      }
+      const buffer = Buffer.concat(chunks)
+      const url = await fastify.storage.uploadBuffer(buffer, data.filename || 'photo.jpg', data.mimetype, 'mating-photos')
+
+      const mating = await Mating.findOneAndUpdate(
+        { _id: req.params.matingId, seasonId: season._id, userId: uid },
+        { $set: { malePhoto: url } },
+        { new: true },
+      )
+      if (!mating) return notFound(reply, 'Mating not found')
+      return serializeMating(mating)
+    },
+  )
+
+  // ── DELETE /api/seasons/:seasonId/matings/:matingId/photo ──────
+  fastify.delete<{ Params: { seasonId: string; matingId: string } }>(
+    '/:seasonId/matings/:matingId/photo',
+    async (req, reply) => {
+      const uid = userId(req)
+      const season = await requireSeason(req.params.seasonId, uid)
+      if (!season) return notFound(reply, 'Season not found')
+
+      const mating = await Mating.findOne({ _id: req.params.matingId, seasonId: season._id, userId: uid })
+      if (!mating) return notFound(reply, 'Mating not found')
+
+      if (mating.malePhoto) {
+        await fastify.storage.deleteFile(mating.malePhoto).catch(() => {})
+      }
+      mating.malePhoto = null
+      await mating.save()
+      return serializeMating(mating)
+    },
+  )
+
+  // ── POST /api/seasons/:seasonId/matings/:matingId/hens/:henId/photo ──
+  // Upload hen photo
+  fastify.post<{ Params: { seasonId: string; matingId: string; henId: string } }>(
+    '/:seasonId/matings/:matingId/hens/:henId/photo',
+    async (req, reply) => {
+      const uid = userId(req)
+      const season = await requireSeason(req.params.seasonId, uid)
+      if (!season) return notFound(reply, 'Season not found')
+
+      const data = await req.file()
+      if (!data) return reply.code(400).send({ error: 'Bad Request', message: 'No file', statusCode: 400 })
+
+      const mating = await Mating.findOne({ _id: req.params.matingId, seasonId: season._id, userId: uid })
+      if (!mating) return notFound(reply, 'Mating not found')
+
+      const henIdx = mating.hens.findIndex((h) => h._id.toString() === req.params.henId)
+      if (henIdx === -1) return notFound(reply, 'Hen not found')
+
+      const chunks: Buffer[] = []
+      for await (const chunk of data.file) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      }
+      const buffer = Buffer.concat(chunks)
+      const url = await fastify.storage.uploadBuffer(buffer, data.filename || 'photo.jpg', data.mimetype, 'hen-photos')
+
+      const updated = await Mating.findOneAndUpdate(
+        { _id: req.params.matingId, seasonId: season._id, userId: uid },
+        { $set: { [`hens.${henIdx}.photo`]: url } },
+        { new: true },
+      )
+      if (!updated) return notFound(reply, 'Mating not found')
+      return serializeMating(updated)
+    },
+  )
+
+  // ── DELETE /api/seasons/:seasonId/matings/:matingId/hens/:henId/photo ──
+  fastify.delete<{ Params: { seasonId: string; matingId: string; henId: string } }>(
+    '/:seasonId/matings/:matingId/hens/:henId/photo',
+    async (req, reply) => {
+      const uid = userId(req)
+      const season = await requireSeason(req.params.seasonId, uid)
+      if (!season) return notFound(reply, 'Season not found')
+
+      const mating = await Mating.findOne({ _id: req.params.matingId, seasonId: season._id, userId: uid })
+      if (!mating) return notFound(reply, 'Mating not found')
+
+      const henIdx = mating.hens.findIndex((h) => h._id.toString() === req.params.henId)
+      if (henIdx === -1) return notFound(reply, 'Hen not found')
+
+      const existingPhoto = mating.hens[henIdx]!.photo
+      if (existingPhoto) {
+        await fastify.storage.deleteFile(existingPhoto).catch(() => {})
+      }
+
+      const updated = await Mating.findOneAndUpdate(
+        { _id: req.params.matingId, seasonId: season._id, userId: uid },
+        { $set: { [`hens.${henIdx}.photo`]: null } },
+        { new: true },
+      )
+      if (!updated) return notFound(reply, 'Mating not found')
+      return serializeMating(updated)
+    },
+  )
+
   // ── DELETE /api/seasons/:seasonId/generate ────────────────────
   // Reset markings — clear generated data, allow re-generation
   fastify.delete<{ Params: { seasonId: string } }>('/:seasonId/generate', async (req, reply) => {
@@ -699,6 +855,8 @@ function serializeMating(m: IMating) {
       _id: h._id.toString(),
       henName: h.henName,
       marking: h.marking,
+      previousMarking: h.previousMarking ?? null,
+      photo: h.photo ?? null,
       eggsLaid: h.eggsLaid ?? null,
       chicksHatched: h.chicksHatched ?? null,
       maleCount: h.maleCount ?? null,
@@ -714,6 +872,7 @@ function serializeMating(m: IMating) {
     totalChicksHatched: hasData ? totalHatched : null,
     totalMaleCount: hasData ? totalMales : null,
     totalFemaleCount: hasData ? totalFemales : null,
+    malePhoto: m.malePhoto ?? null,
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
   }

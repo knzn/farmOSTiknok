@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin'
 import jwt from '@fastify/jwt'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import { User } from '../models/user.js'
 
 export interface JwtPayload {
   sub: string       // userId
@@ -20,6 +21,7 @@ declare module '@fastify/jwt' {
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+    requireAdmin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     // Exposed so auth routes can sign/verify refresh tokens
     signRefreshToken: (payload: Omit<JwtPayload, 'type'>) => string
     verifyRefreshToken: (token: string) => JwtPayload
@@ -76,6 +78,27 @@ async function authPlugin(fastify: FastifyInstance) {
         }
       } catch {
         reply.code(401).send({ error: 'Unauthorized', message: 'Invalid or expired token' })
+      }
+    },
+  )
+
+  // Decorate: admin-only middleware — must be authenticated AND isAdmin: true
+  fastify.decorate(
+    'requireAdmin',
+    async function (req: FastifyRequest, reply: FastifyReply): Promise<void> {
+      try {
+        await req.jwtVerify()
+        if ((req.user as JwtPayload).type !== 'access') {
+          return reply.code(401).send({ error: 'Unauthorized', message: 'Invalid token type' })
+        }
+      } catch {
+        return reply.code(401).send({ error: 'Unauthorized', message: 'Invalid or expired token' })
+      }
+
+      const userId = (req.user as JwtPayload).sub
+      const user = await User.findById(userId).select('isAdmin').lean()
+      if (!user?.isAdmin) {
+        return reply.code(403).send({ error: 'Forbidden', message: 'Admin access required', statusCode: 403 })
       }
     },
   )

@@ -12,10 +12,12 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router'
 import { MarkingPicker } from '../../../../../../components/MarkingPicker'
 import { apiRequest } from '../../../../../../lib/api'
+import { useToastStore } from '../../../../../../stores/toast'
 
 export default function CreateMatingScreen() {
   const { seasonId } = useLocalSearchParams<{ seasonId: string }>()
   const router = useRouter()
+  const showToast = useToastStore((s) => s.show)
 
   const [maleName, setMaleName] = useState('')
   const [henCount, setHenCount] = useState(1)
@@ -65,6 +67,7 @@ export default function CreateMatingScreen() {
           mandatoryMarking: mandatoryMarking ?? null,
         },
       })
+      showToast('Mating saved')
       router.back()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save mating')
@@ -81,7 +84,7 @@ export default function CreateMatingScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 py-6"
+        contentContainerClassName="px-5 pb-6 pt-14"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -181,15 +184,18 @@ export default function CreateMatingScreen() {
           </View>
         )}
 
-        {/* Mandatory marking (optional) */}
+        {/* Force Marking (optional) */}
         <View className="mb-6">
           <TouchableOpacity
             className="flex-row items-center justify-between mb-3"
             onPress={() => setShowMarkingPicker((v) => !v)}
           >
-            <Text className="text-ink-2 text-xs font-semibold uppercase tracking-wider">
-              Pre-assign Marking (Optional)
-            </Text>
+            <View>
+              <Text className="text-ink-2 text-xs font-semibold uppercase tracking-wider">
+                Force Marking (Optional)
+              </Text>
+              <Text className="text-ink-3 text-xs mt-1">Set a preferred combo for this male. TIKNOK assigns around it.</Text>
+            </View>
             <Text className="text-accent text-sm">{showMarkingPicker ? 'Hide ▲' : 'Show ▼'}</Text>
           </TouchableOpacity>
 

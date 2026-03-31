@@ -4,6 +4,8 @@ export interface IHen {
   _id: Types.ObjectId
   henName: string
   marking: string | null
+  previousMarking: string | null
+  photo: string | null
   eggsLaid: number | null
   chicksHatched: number | null
   maleCount: number | null
@@ -25,6 +27,7 @@ export interface IMating extends Document {
   penChicksHatched: number | null
   penMaleCount: number | null
   penFemaleCount: number | null
+  malePhoto: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -33,6 +36,8 @@ const HenSchema = new Schema<IHen>(
   {
     henName: { type: String, required: true, trim: true },
     marking: { type: String, default: null },
+    previousMarking: { type: String, default: null },
+    photo: { type: String, default: null },
     eggsLaid: { type: Number, default: null },
     chicksHatched: { type: Number, default: null },
     maleCount: { type: Number, default: null },
@@ -59,6 +64,7 @@ const MatingSchema = new Schema<IMating>(
     penChicksHatched: { type: Number, default: null },
     penMaleCount: { type: Number, default: null },
     penFemaleCount: { type: Number, default: null },
+    malePhoto: { type: String, default: null },
   },
   { timestamps: true },
 )

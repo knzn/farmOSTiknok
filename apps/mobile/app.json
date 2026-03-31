@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tiknok",
     "slug": "tiknok",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tiknok",
@@ -22,9 +22,11 @@
         "backgroundColor": "#0A0A0A"
       },
       "package": "com.tiknok.app",
-      "usesCleartextTraffic": true,
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
       ]
     },
     "plugins": [
@@ -41,10 +43,19 @@
       "expo-video",
       "expo-media-library",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/symbol.png",
+          "color": "#C8A84B",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": false
           }
         }
       ]

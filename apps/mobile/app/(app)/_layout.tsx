@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router'
 import { Text } from 'react-native'
+import { FarmSetupModal } from '../../components/FarmSetupModal'
 
 const GOLD = '#C8A84B'
 const MUTED = '#606060'
@@ -12,6 +13,7 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function AppLayout() {
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -46,20 +48,8 @@ export default function AppLayout() {
           tabBarIcon: ({ focused }) => <TabIcon emoji="🐓" focused={focused} />,
         }}
       />
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          title: 'Schedule',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📅" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🔍" focused={focused} />,
-        }}
-      />
+      <Tabs.Screen name="schedule" options={{ href: null }} />
+      <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen
         name="profile/[userId]"
         options={{
@@ -75,6 +65,9 @@ export default function AppLayout() {
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="profile/edit" options={{ href: null }} />
       <Tabs.Screen name="profile/connections" options={{ href: null }} />
+      <Tabs.Screen name="admin" options={{ href: null }} />
     </Tabs>
+    <FarmSetupModal />
+    </>
   )
 }

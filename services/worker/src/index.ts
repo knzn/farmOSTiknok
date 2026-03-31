@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { Worker, Queue } from 'bullmq'
 import { Redis as IORedis } from 'ioredis'
+import { Expo } from 'expo-server-sdk'
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import mongoose from 'mongoose'
@@ -13,6 +14,23 @@ import { pipeline } from 'stream/promises'
 import { createWriteStream, createReadStream } from 'fs'
 import { Readable } from 'stream'
 import crypto from 'crypto'
+
+// ─── Expo push client ─────────────────────────────────────────────────────────
+
+const expo = new Expo()
+
+async function sendPush(
+  token: string | null | undefined,
+  title: string,
+  body: string,
+): Promise<void> {
+  if (!token || !Expo.isExpoPushToken(token)) return
+  try {
+    await expo.sendPushNotificationsAsync([{ to: token, title, body, sound: 'default' }])
+  } catch (e) {
+    console.warn('[push] Failed to send notification:', (e as Error).message)
+  }
+}
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -40,7 +58,7 @@ const s3 = new S3Client({
   forcePathStyle: false,
 })
 
-// ─── MongoDB Post model (minimal, matches apps/api) ──────────────────────────
+// ─── MongoDB models (minimal, strict: false to avoid full schema duplication) ─
 
 const PostSchema = new mongoose.Schema({
   processingStatus: String,
@@ -49,6 +67,26 @@ const PostSchema = new mongoose.Schema({
 }, { strict: false })
 
 const Post = mongoose.models.Post ?? mongoose.model('Post', PostSchema)
+
+const UserSchema = new mongoose.Schema({
+  subscriptionStatus: String,
+  trialEndsAt: Date,
+  paidUntil: Date,
+  dataDeletesAt: Date,
+  subscriptionTier: String,
+  expoPushToken: String,
+  passwordHash: String,
+  accountSecuredAt: Date,
+}, { strict: false })
+
+const User = mongoose.models.User ?? mongoose.model('User', UserSchema)
+
+// Minimal models for data deletion
+const Season   = mongoose.models.Season   ?? mongoose.model('Season',   new mongoose.Schema({}, { strict: false }))
+const Worker   = mongoose.models.Worker   ?? mongoose.model('Worker',   new mongoose.Schema({}, { strict: false }))
+const Expense  = mongoose.models.Expense  ?? mongoose.model('Expense',  new mongoose.Schema({}, { strict: false }))
+const Mating   = mongoose.models.Mating   ?? mongoose.model('Mating',   new mongoose.Schema({}, { strict: false }))
+const MarkingPool = mongoose.models.MarkingPool ?? mongoose.model('MarkingPool', new mongoose.Schema({}, { strict: false }))
 
 async function connectDB() {
   if (!MONGODB_URI) { console.warn('[worker] MONGODB_URI not set — DB updates disabled'); return }
@@ -275,7 +313,160 @@ videoWorker.on('failed', (job, err) => console.error(`[video] failed: ${job?.id}
 aiWorker.on('completed', (job) => console.log(`[ai] done: ${job.id}`))
 aiWorker.on('failed', (job, err) => console.error(`[ai] failed: ${job?.id}`, err))
 
+// ─── Subscription cron ────────────────────────────────────────────────────────
+
+const subscriptionQueue = new Queue('subscription.cron', { connection })
+
+// Handler: run subscription lifecycle checks
+async function handleSubscriptionCron(): Promise<void> {
+  if (!MONGODB_URI) return
+  const now = new Date()
+
+  // ── 1. Expire trials that have ended ──────────────────────────────────────
+  const expiredTrials = await User.find({
+    subscriptionStatus: 'trial',
+    trialEndsAt: { $lt: now },
+  }).lean()
+
+  for (const user of expiredTrials) {
+    const dataDeletesAt = new Date(now)
+    dataDeletesAt.setMonth(dataDeletesAt.getMonth() + 6)
+    await User.updateOne(
+      { _id: user._id },
+      { subscriptionStatus: 'expired', subscriptionTier: 'free', dataDeletesAt },
+    )
+    console.log(`[subscription] Trial expired: ${user._id} — data deletes at ${dataDeletesAt.toISOString()}`)
+  }
+
+  // ── 2. Expire active subscriptions that have ended ────────────────────────
+  const expiredSubs = await User.find({
+    subscriptionStatus: 'active',
+    paidUntil: { $lt: now },
+  }).lean()
+
+  for (const user of expiredSubs) {
+    const dataDeletesAt = new Date(now)
+    dataDeletesAt.setMonth(dataDeletesAt.getMonth() + 6)
+    await User.updateOne(
+      { _id: user._id },
+      { subscriptionStatus: 'expired', subscriptionTier: 'free', dataDeletesAt },
+    )
+    console.log(`[subscription] Subscription expired: ${user._id}`)
+  }
+
+  // ── 3. Warn users 30 days before data deletion ────────────────────────────
+  const warn30 = new Date(now)
+  warn30.setDate(warn30.getDate() + 30)
+  const warn30Start = new Date(warn30)
+  warn30Start.setHours(0, 0, 0, 0)
+  const warn30End = new Date(warn30)
+  warn30End.setHours(23, 59, 59, 999)
+
+  const usersWarn30 = await User.find({
+    subscriptionStatus: 'expired',
+    dataDeletesAt: { $gte: warn30Start, $lte: warn30End },
+  }).lean()
+
+  for (const user of usersWarn30) {
+    console.log(`[subscription] WARNING 30d: user ${user._id} data deletes in 30 days`)
+    await sendPush(
+      user.expoPushToken,
+      '⚠️ Your farm data will be deleted in 30 days',
+      'Subscribe to TIKNOK to keep your breeding records. ₱50/month or ₱499/year.',
+    )
+  }
+
+  // ── 4. Warn users 7 days before data deletion ─────────────────────────────
+  const warn7 = new Date(now)
+  warn7.setDate(warn7.getDate() + 7)
+  const warn7Start = new Date(warn7)
+  warn7Start.setHours(0, 0, 0, 0)
+  const warn7End = new Date(warn7)
+  warn7End.setHours(23, 59, 59, 999)
+
+  const usersWarn7 = await User.find({
+    subscriptionStatus: 'expired',
+    dataDeletesAt: { $gte: warn7Start, $lte: warn7End },
+  }).lean()
+
+  for (const user of usersWarn7) {
+    console.log(`[subscription] WARNING 7d: user ${user._id} data deletes in 7 days`)
+    await sendPush(
+      user.expoPushToken,
+      '🚨 7 days until your farm data is deleted',
+      'Subscribe now to save your breeding records. Contact us on Messenger.',
+    )
+  }
+
+  // ── 5. Nudge social users to secure their account (Day 5 after register) ───
+  const day5Start = new Date(now)
+  day5Start.setDate(day5Start.getDate() - 5)
+  day5Start.setHours(0, 0, 0, 0)
+  const day5End = new Date(day5Start)
+  day5End.setHours(23, 59, 59, 999)
+
+  const unsecuredSocialUsers = await User.find({
+    createdAt: { $gte: day5Start, $lte: day5End },
+    passwordHash: null,           // social-only (no password set)
+    accountSecuredAt: null,       // not yet secured
+    expoPushToken: { $ne: null },
+  }).lean()
+
+  for (const user of unsecuredSocialUsers) {
+    await sendPush(
+      user.expoPushToken,
+      '🔐 Secure your TIKNOK account',
+      'Add an email and password so you never lose access to your breeding records.',
+    )
+    console.log(`[security] Day-5 nudge sent to user ${user._id}`)
+  }
+
+  // ── 6. Delete data for accounts past dataDeletesAt ────────────────────────
+  const usersToDelete = await User.find({
+    subscriptionStatus: 'expired',
+    dataDeletesAt: { $lt: now },
+  }).lean()
+
+  for (const user of usersToDelete) {
+    const userId = user._id
+    await Promise.all([
+      Season.deleteMany({ userId }),
+      Mating.deleteMany({ userId }),
+      MarkingPool.deleteMany({ userId }),
+      Worker.deleteMany({ userId }),
+      Expense.deleteMany({ userId }),
+    ])
+    // Clear dataDeletesAt so we don't re-process, mark as cleaned
+    await User.updateOne({ _id: userId }, { dataDeletesAt: null })
+    console.log(`[subscription] Data deleted for user ${userId}`)
+  }
+
+  console.log(`[subscription] Cron complete — checked ${expiredTrials.length + expiredSubs.length} expired, deleted ${usersToDelete.length}`)
+}
+
+const subscriptionWorker = new Worker(
+  'subscription.cron',
+  async () => { await handleSubscriptionCron() },
+  { connection },
+)
+
+subscriptionWorker.on('completed', () => console.log('[subscription] Cron job completed'))
+subscriptionWorker.on('failed', (job, err) => console.error('[subscription] Cron job failed:', err.message))
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 await connectDB()
+
+// Schedule subscription cron — runs daily at midnight (if not already scheduled)
+const existingJobs = await subscriptionQueue.getRepeatableJobs()
+const alreadyScheduled = existingJobs.some((j) => j.name === 'daily-subscription-check')
+if (!alreadyScheduled) {
+  await subscriptionQueue.add(
+    'daily-subscription-check',
+    {},
+    { repeat: { pattern: '0 0 * * *' } }, // every day at midnight
+  )
+  console.log('[subscription] Daily cron scheduled')
+}
+
 console.log('Worker started. Listening for jobs...')

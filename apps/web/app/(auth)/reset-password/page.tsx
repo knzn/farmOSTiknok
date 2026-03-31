@@ -1,0 +1,120 @@
+'use client'
+import { useState, Suspense } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { apiRequest } from '@/lib/api'
+
+function ResetPasswordForm() {
+  const searchParams          = useSearchParams()
+  const token                 = searchParams.get('token') ?? ''
+  const router                = useRouter()
+  const [password, setPassword]               = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword]       = useState(false)
+  const [loading, setLoading]                 = useState(false)
+  const [done, setDone]                       = useState(false)
+  const [error, setError]                     = useState<string | null>(null)
+
+  async function handleReset() {
+    setError(null)
+    if (password.length < 8)          return setError('Password must be at least 8 characters')
+    if (password !== confirmPassword)  return setError('Passwords do not match')
+    setLoading(true)
+    try {
+      await apiRequest('/auth/reset-password', {
+        method: 'POST',
+        body: { token, password },
+      })
+      setDone(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to reset password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!token) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="text-5xl">⚠️</div>
+        <p className="text-ink-2 text-sm">Invalid reset link.</p>
+        <Link href="/forgot-password" className="text-accent font-bold text-sm">Request a new one</Link>
+      </div>
+    )
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="text-5xl">✅</div>
+        <h2 className="text-ink text-xl font-bold">Password updated!</h2>
+        <p className="text-ink-2 text-sm">You can now sign in with your new password.</p>
+        <button
+          onClick={() => router.replace('/login')}
+          className="bg-accent text-canvas font-bold rounded-full px-8 py-3 mt-2 hover:opacity-90"
+        >
+          Go to Sign In
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col items-center mb-6">
+        <div className="text-4xl font-black tracking-tight text-accent mb-2">TIKNOK</div>
+        <h2 className="text-ink text-lg font-bold">Set new password</h2>
+      </div>
+
+      {error && (
+        <div className="bg-danger/10 border border-danger/30 rounded-md px-4 py-3">
+          <p className="text-danger text-sm">{error}</p>
+        </div>
+      )}
+
+      <div className="flex items-center bg-card border border-rim rounded-md px-4">
+        <span className="text-ink-3 mr-3">🔒</span>
+        <input
+          type={showPassword ? 'text' : 'password'}
+          placeholder="New password (8+ characters)"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          className="flex-1 bg-transparent text-ink text-base py-4 outline-none placeholder:text-ink-3"
+        />
+        <button onClick={() => setShowPassword(v => !v)} className="text-ink-3 text-sm hover:text-ink-2">
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+      </div>
+
+      <div className="flex items-center bg-card border border-rim rounded-md px-4">
+        <span className="text-ink-3 mr-3">🔒</span>
+        <input
+          type={showPassword ? 'text' : 'password'}
+          placeholder="Confirm password"
+          value={confirmPassword}
+          onChange={e => setConfirmPassword(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleReset()}
+          className="flex-1 bg-transparent text-ink text-base py-4 outline-none placeholder:text-ink-3"
+        />
+      </div>
+
+      <button
+        onClick={handleReset}
+        disabled={loading}
+        className="w-full bg-accent hover:opacity-90 text-canvas font-bold text-base rounded-full py-4 transition-opacity disabled:opacity-60"
+      >
+        {loading ? (
+          <span className="w-5 h-5 border-2 border-canvas/40 border-t-canvas rounded-full animate-spin mx-auto block" />
+        ) : 'Update Password'}
+      </button>
+    </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordForm />
+    </Suspense>
+  )
+}

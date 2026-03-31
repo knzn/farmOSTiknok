@@ -6,21 +6,23 @@ module.exports = {
     extend: {
       colors: {
         // Backgrounds
-        canvas:  '#0F0F11',
-        card:    '#18181B',
+        canvas:   '#0A0A0A',
+        card:     '#141414',
+        'card-2': '#1E1E1E',
 
         // Accents
-        accent:  '#FF3D5A',
-        'accent-muted': 'rgba(255,61,90,0.15)',
-        secondary: '#7B61FF',
+        accent:          '#C8A84B',
+        'accent-muted':  'rgba(200,168,75,0.15)',
+        secondary:       '#7B61FF',
         'secondary-muted': 'rgba(123,97,255,0.15)',
 
         // Text
-        ink:    '#FFFFFF',
-        'ink-2': '#A1A1AA',
+        ink:     '#FFFFFF',
+        'ink-2': '#A0A0A0',
+        'ink-3': '#606060',
 
         // Divider / border
-        rim:    '#27272A',
+        rim: '#2A2A2A',
 
         // Status
         success: '#22C55E',

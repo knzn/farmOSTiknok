@@ -8,6 +8,7 @@ import { useFocusEffect } from 'expo-router'
 import { apiRequest } from '../../../lib/api'
 import { useAuthStore } from '../../../stores/auth'
 import { PostModal } from '../../../components/PostModal'
+import { SecureAccountSheet } from '../../../components/SecureAccountSheet'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const GRID_GAP = 2
@@ -49,18 +50,33 @@ export default function ProfileScreen() {
   const [followLoading, setFollowLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modalPostId, setModalPostId] = useState<string | null>(null)
+  const [tiknokId, setTiknokId] = useState<string | null>(null)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [hasPassword, setHasPassword] = useState(true)
+  const [accountSecuredAt, setAccountSecuredAt] = useState<string | null>(null)
+  const [secureSheetVisible, setSecureSheetVisible] = useState(false)
 
   const loadProfile = useCallback(async () => {
     try {
       setError(null)
       const targetId = isMe ? currentUserId : userId
-      const [profileData, postsData] = await Promise.all([
+      const requests: Promise<unknown>[] = [
         apiRequest<UserProfile>(`/users/${targetId}`),
         apiRequest<{ posts: GridPost[] }>(`/users/${targetId}/posts`),
-      ])
+      ]
+      if (isMe) requests.push(apiRequest<{ tiknokId?: string; subscriptionStatus?: string; isAdmin?: boolean; hasPassword?: boolean; accountSecuredAt?: string | null }>('/auth/me'))
+      const [profileData, postsData, meData] = await Promise.all(requests) as [UserProfile, { posts: GridPost[] }, { tiknokId?: string; subscriptionStatus?: string; isAdmin?: boolean; hasPassword?: boolean; accountSecuredAt?: string | null } | undefined]
       setProfile(profileData)
       setFollowing(profileData.isFollowing)
       setPosts(postsData.posts)
+      if (meData) {
+        setTiknokId(meData.tiknokId ?? null)
+        setSubscriptionStatus(meData.subscriptionStatus ?? null)
+        setIsAdmin(meData.isAdmin ?? false)
+        setHasPassword(meData.hasPassword !== false)
+        setAccountSecuredAt(meData.accountSecuredAt ?? null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load profile')
     }
@@ -180,6 +196,26 @@ export default function ProfileScreen() {
           <Text className="text-ink text-xl font-bold">@{profile?.username}</Text>
           {profile?.isBreeder && <Text>🐓</Text>}
         </View>
+        {isMe && tiknokId ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <View style={{ backgroundColor: '#C8A84B22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <Text style={{ color: '#C8A84B', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>{tiknokId}</Text>
+            </View>
+            {subscriptionStatus && (
+              <View style={{
+                backgroundColor: subscriptionStatus === 'active' ? '#22C55E22' : subscriptionStatus === 'trial' ? '#C8A84B22' : '#EF444422',
+                borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+              }}>
+                <Text style={{
+                  color: subscriptionStatus === 'active' ? '#22C55E' : subscriptionStatus === 'trial' ? '#C8A84B' : '#EF4444',
+                  fontSize: 10, fontWeight: '700', textTransform: 'uppercase',
+                }}>
+                  {subscriptionStatus === 'active' ? 'Pro' : subscriptionStatus === 'trial' ? 'Trial' : subscriptionStatus}
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : null}
         {profile?.location ? (
           <Text className="text-ink-2 text-sm mb-3">📍 {profile.location}</Text>
         ) : null}
@@ -232,6 +268,32 @@ export default function ProfileScreen() {
             >
               <Text className="text-ink font-semibold text-sm">🐓  Breeder Module</Text>
             </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                onPress={() => router.push('/(app)/admin' as any)}
+                activeOpacity={0.8}
+                style={{
+                  backgroundColor: '#C8A84B22',
+                  borderRadius: 8, borderWidth: 1, borderColor: '#C8A84B55',
+                  paddingVertical: 12, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#C8A84B', fontSize: 14, fontWeight: '700' }}>⚙️  Admin Panel</Text>
+              </TouchableOpacity>
+            )}
+            {!hasPassword && !accountSecuredAt && (
+              <TouchableOpacity
+                onPress={() => setSecureSheetVisible(true)}
+                activeOpacity={0.8}
+                style={{
+                  backgroundColor: '#3B82F618',
+                  borderRadius: 8, borderWidth: 1, borderColor: '#3B82F644',
+                  paddingVertical: 12, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#3B82F6', fontSize: 14, fontWeight: '700' }}>🔐  Secure Account</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={clearTokens}
               activeOpacity={0.6}
@@ -306,6 +368,16 @@ export default function ProfileScreen() {
       postId={modalPostId}
       onClose={() => setModalPostId(null)}
       currentUserId={currentUserId}
+    />
+    <SecureAccountSheet
+      visible={secureSheetVisible}
+      hasPlaceholderEmail={!hasPassword && !accountSecuredAt}
+      onClose={() => setSecureSheetVisible(false)}
+      onSecured={() => {
+        setSecureSheetVisible(false)
+        setAccountSecuredAt(new Date().toISOString())
+        setHasPassword(true)
+      }}
     />
     </>
   )

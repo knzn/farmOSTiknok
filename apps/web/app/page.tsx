@@ -44,6 +44,22 @@ export default function LandingPage() {
         </div>
 
         <p className="text-ink-3 text-sm mt-6">60-day free trial · No credit card required</p>
+
+        {/* Download buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 mt-8 w-full sm:w-auto">
+          <a
+            href={process.env.NEXT_PUBLIC_APK_URL ?? '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto flex items-center justify-center gap-3 bg-card border border-rim hover:border-accent/40 text-ink font-semibold text-base px-6 py-3.5 rounded-full transition-colors"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-accent">
+              <path d="M17.523 15.341 14.58 12.4l2.943-2.943a.5.5 0 0 0 0-.707L15.25 6.477a.5.5 0 0 0-.707 0L11.6 9.42 8.657 6.477a.5.5 0 0 0-.707 0L5.677 8.75a.5.5 0 0 0 0 .707L8.62 12.4l-2.943 2.941a.5.5 0 0 0 0 .707l2.273 2.273a.5.5 0 0 0 .707 0l2.943-2.943 2.943 2.943a.5.5 0 0 0 .707 0l2.273-2.273a.5.5 0 0 0 0-.707z"/>
+              <path d="M3 3.5A.5.5 0 0 1 3.5 3h17a.5.5 0 0 1 .5.5v17a.5.5 0 0 1-.5.5h-17a.5.5 0 0 1-.5-.5v-17z" opacity=".1"/>
+            </svg>
+            Download for Android
+          </a>
+        </div>
       </section>
 
       {/* Features */}

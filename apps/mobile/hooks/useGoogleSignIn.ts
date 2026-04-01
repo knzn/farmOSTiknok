@@ -6,7 +6,8 @@ import { apiRequest } from '../lib/api'
 
 WebBrowser.maybeCompleteAuthSession()
 
-const WEB_CLIENT_ID = '593043566086-bnst6v6jkdssq1eccehbclklms68kn5e.apps.googleusercontent.com'
+const ANDROID_CLIENT_ID = '593043566086-2gp9li3b9tmnrnn6qsgrpr6km63u0dto.apps.googleusercontent.com'
+const WEB_CLIENT_ID     = '593043566086-bnst6v6jkdssq1eccehbclklms68kn5e.apps.googleusercontent.com'
 
 type AuthResponse = {
   accessToken: string
@@ -20,7 +21,8 @@ export function useGoogleSignIn(onSuccess: () => void) {
   const [error, setError]     = useState<string | null>(null)
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: WEB_CLIENT_ID,
+    androidClientId: ANDROID_CLIENT_ID,
+    webClientId:     WEB_CLIENT_ID,
   })
 
   useEffect(() => {

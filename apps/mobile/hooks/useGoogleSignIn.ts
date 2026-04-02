@@ -23,7 +23,7 @@ export function useGoogleSignIn(onSuccess: () => void) {
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId: ANDROID_CLIENT_ID,
     webClientId:     WEB_CLIENT_ID,
-    redirectUri:     'tiknok://',
+    redirectUri:     'tiknok://oauthredirect',
   })
 
   useEffect(() => {

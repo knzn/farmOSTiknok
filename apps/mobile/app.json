@@ -28,8 +28,7 @@
           "autoVerify": true,
           "data": [
             {
-              "scheme": "com.tiknok.app",
-              "host": "oauthredirect"
+              "scheme": "com.tiknok.app"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

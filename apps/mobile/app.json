@@ -22,18 +22,6 @@
         "backgroundColor": "#0A0A0A"
       },
       "package": "com.tiknok.app",
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "com.googleusercontent.apps.593043566086-2gp9li3b9tmnrnn6qsgrpr6km63u0dto"
-            }
-          ],
-          "category": ["BROWSABLE", "DEFAULT"]
-        }
-      ],
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS",

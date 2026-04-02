@@ -8,7 +8,8 @@ WebBrowser.maybeCompleteAuthSession()
 
 const ANDROID_CLIENT_ID = '593043566086-2gp9li3b9tmnrnn6qsgrpr6km63u0dto.apps.googleusercontent.com'
 const WEB_CLIENT_ID     = '593043566086-bnst6v6jkdssq1eccehbclklms68kn5e.apps.googleusercontent.com'
-const REDIRECT_URI      = 'https://auth.expo.io/@tiknok/tiknok'
+// Standard Google reverse-client-ID redirect — auto-allowed for Android OAuth clients, no custom scheme needed
+const REDIRECT_URI      = 'com.googleusercontent.apps.593043566086-2gp9li3b9tmnrnn6qsgrpr6km63u0dto:/oauth2redirect'
 
 type AuthResponse = {
   accessToken: string

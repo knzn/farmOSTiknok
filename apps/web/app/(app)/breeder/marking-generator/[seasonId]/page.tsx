@@ -1,8 +1,10 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
+import MarkingExportCard from '@/components/MarkingExportCard'
+import { downloadAsPng } from '@/lib/downloadPng'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -150,6 +152,24 @@ export default function SeasonDetailPage() {
   // Season delete
   const [deletingSeason, setDeletingSeason]       = useState(false)
   const [deleteSeasonConfirm, setDeleteSeasonConfirm] = useState(false)
+
+  // Export card
+  const exportCardRef = useRef<HTMLDivElement>(null)
+  const [exporting, setExporting]                     = useState(false)
+  const [exportFarmName, setExportFarmName]           = useState('')
+  const [exportOwnerName, setExportOwnerName]         = useState('')
+  const [exportIncludeTotals, setExportIncludeTotals] = useState(true)
+  const [showExportModal, setShowExportModal]         = useState(false)
+
+  async function handleDownloadCard() {
+    if (!exportCardRef.current || !season) return
+    setExporting(true)
+    try {
+      await downloadAsPng(exportCardRef.current, `tiknok-${season.name.replace(/\s+/g, '-')}-${season.year}.png`)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -432,14 +452,22 @@ export default function SeasonDetailPage() {
       </div>
       {genError && <p className="text-danger text-sm mb-3">{genError}</p>}
 
-      {/* Save markings card button */}
+      {/* Markings card buttons */}
       {generated && matings.some(m => m.hens.some(h => h.marking)) && (
-        <button
-          onClick={() => router.push(`/breeder/marking-generator/${seasonId}/generate`)}
-          className="w-full bg-info hover:opacity-90 text-white font-bold rounded-xl py-3.5 mb-4 flex items-center justify-center gap-2 transition-opacity"
-        >
-          <span>🖼</span> View Markings Card
-        </button>
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => router.push(`/breeder/marking-generator/${seasonId}/generate`)}
+            className="flex-1 bg-info hover:opacity-90 text-white font-bold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-opacity"
+          >
+            <span>🖼</span> View Card
+          </button>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex-1 bg-accent/15 border border-accent/40 text-accent font-bold rounded-xl py-3.5 flex items-center justify-center gap-2 hover:bg-accent/25 transition-colors"
+          >
+            <span>⬇</span> Download PNG
+          </button>
+        </div>
       )}
 
       {/* Mating grid */}
@@ -812,6 +840,68 @@ export default function SeasonDetailPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Export modal */}
+      {showExportModal && season && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-card-2 rounded-2xl w-full max-w-md border border-rim">
+            <div className="flex items-center justify-between p-5 border-b border-rim">
+              <h2 className="text-ink font-bold text-lg">Download Marking Card</h2>
+              <button onClick={() => setShowExportModal(false)} className="text-ink-3 hover:text-ink text-2xl leading-none">×</button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="block text-ink-3 text-xs font-semibold uppercase tracking-wider mb-1">Farm Name</label>
+                <input
+                  value={exportFarmName}
+                  onChange={e => setExportFarmName(e.target.value)}
+                  placeholder="Your farm name"
+                  className="w-full bg-canvas border border-rim rounded-xl px-4 py-3 text-ink text-sm outline-none focus:border-accent placeholder:text-ink-3"
+                />
+              </div>
+              <div>
+                <label className="block text-ink-3 text-xs font-semibold uppercase tracking-wider mb-1">Owner Name</label>
+                <input
+                  value={exportOwnerName}
+                  onChange={e => setExportOwnerName(e.target.value)}
+                  placeholder="Your name (optional)"
+                  className="w-full bg-canvas border border-rim rounded-xl px-4 py-3 text-ink text-sm outline-none focus:border-accent placeholder:text-ink-3"
+                />
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={exportIncludeTotals}
+                  onChange={e => setExportIncludeTotals(e.target.checked)}
+                  className="w-4 h-4 accent-[#C8A84B]"
+                />
+                <span className="text-ink-2 text-sm">Include breeding totals</span>
+              </label>
+              <button
+                onClick={() => { handleDownloadCard(); setShowExportModal(false) }}
+                disabled={exporting}
+                className="w-full bg-accent hover:opacity-90 text-canvas font-bold rounded-xl py-3.5 transition-opacity disabled:opacity-60"
+              >
+                {exporting ? 'Generating…' : 'Download PNG'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden export card — rendered off-screen for html2canvas */}
+      {season && (
+        <MarkingExportCard
+          ref={exportCardRef}
+          farmName={exportFarmName}
+          ownerName={exportOwnerName}
+          season={season}
+          matings={matings}
+          includeBreedingTotals={exportIncludeTotals}
+          totals={computeSeasonTotals(matings)}
+          expectedHatchDate={season.expectedHatchDate}
+        />
       )}
     </div>
   )

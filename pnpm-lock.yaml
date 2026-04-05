@@ -217,6 +217,12 @@ importers:
       '@react-oauth/google':
         specifier: ^0.12.1
         version: 0.12.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/html2canvas':
+        specifier: ^1.0.0
+        version: 1.0.0
+      html2canvas:
+        specifier: ^1.4.1
+        version: 1.4.1
       next:
         specifier: 14.2.18
         version: 14.2.18(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2551,6 +2557,10 @@ packages:
 
   '@types/hammerjs@2.0.46':
     resolution: {integrity: sha512-ynRvcq6wvqexJ9brDMS4BnBLzmr0e14d6ZJTEShTBWKymQiHwlAyGu0ZPEFI2Fh1U53F7tN9ufClWM5KvqkKOw==}
+
+  '@types/html2canvas@1.0.0':
+    resolution: {integrity: sha512-BJpVf+FIN9UERmzhbtUgpXj6XBZpG67FMgBLLoj9HZKd9XifcCpSV+UnFcwTZfEyun4U/KmCrrVOG7829L589w==}
+    deprecated: This is a stub types definition. html2canvas provides its own type definitions, so you do not need this installed.
 
   '@types/http-cache-semantics@4.2.0':
     resolution: {integrity: sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==}
@@ -8767,6 +8777,10 @@ snapshots:
       '@types/node': 20.19.37
 
   '@types/hammerjs@2.0.46': {}
+
+  '@types/html2canvas@1.0.0':
+    dependencies:
+      html2canvas: 1.4.1
 
   '@types/http-cache-semantics@4.2.0': {}
 

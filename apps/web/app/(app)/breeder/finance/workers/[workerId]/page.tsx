@@ -1,8 +1,10 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
+import WorkerPayslipCard from '@/components/WorkerPayslipCard'
+import { downloadAsPng } from '@/lib/downloadPng'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +171,26 @@ export default function WorkerDetailPage() {
 
   // History expand
   const [expandedPeriod, setExpandedPeriod] = useState(null as string | null)
+
+  // Payslip export
+  const payslipCardRef   = useRef<HTMLDivElement>(null)
+  const [showPayslipModal, setShowPayslipModal] = useState(false)
+  const [payslipFarmName, setPayslipFarmName]   = useState('')
+  const [payslipOwnerName, setPayslipOwnerName] = useState('')
+  const [exporting, setExporting]               = useState(false)
+
+  async function handleDownloadPayslip() {
+    if (!payslipCardRef.current || !worker) return
+    setExporting(true)
+    try {
+      await downloadAsPng(
+        payslipCardRef.current,
+        `tiknok-payslip-${worker.name.replace(/\s+/g, '-')}-${MONTH_NAMES[viewEndMonth - 1]}-${viewEndYear}.png`,
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -465,11 +487,23 @@ export default function WorkerDetailPage() {
             >
               {payingMonth ? 'Saving…' : 'Mark as Paid'}
             </button>
+            <button
+              onClick={() => setShowPayslipModal(true)}
+              className="flex-1 border border-rim rounded-xl py-2.5 text-ink-2 text-sm font-semibold hover:border-accent/40 transition-colors"
+            >
+              ⬇ Payslip
+            </button>
           </div>
         )}
         {paid && payment && (
-          <div className="px-4 py-3 border-t border-rim">
+          <div className="px-4 py-3 border-t border-rim flex items-center justify-between">
             <p className="text-success text-xs">✓ Paid on {formatDate(payment.paidAt)}</p>
+            <button
+              onClick={() => setShowPayslipModal(true)}
+              className="text-accent text-xs font-semibold hover:opacity-80"
+            >
+              ⬇ Payslip
+            </button>
           </div>
         )}
         {payError && <p className="text-danger text-xs px-4 pb-3">{payError}</p>}
@@ -696,6 +730,62 @@ export default function WorkerDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Payslip export modal */}
+      {showPayslipModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-card-2 rounded-2xl w-full max-w-md border border-rim">
+            <div className="flex items-center justify-between p-5 border-b border-rim">
+              <h2 className="text-ink font-bold text-lg">Download Payslip</h2>
+              <button onClick={() => setShowPayslipModal(false)} className="text-ink-3 hover:text-ink text-2xl leading-none">×</button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="block text-ink-3 text-xs font-semibold uppercase tracking-wider mb-1">Farm Name</label>
+                <input
+                  value={payslipFarmName}
+                  onChange={e => setPayslipFarmName(e.target.value)}
+                  placeholder="Your farm name"
+                  className="w-full bg-canvas border border-rim rounded-xl px-4 py-3 text-ink text-sm outline-none focus:border-accent placeholder:text-ink-3"
+                />
+              </div>
+              <div>
+                <label className="block text-ink-3 text-xs font-semibold uppercase tracking-wider mb-1">Owner Name</label>
+                <input
+                  value={payslipOwnerName}
+                  onChange={e => setPayslipOwnerName(e.target.value)}
+                  placeholder="Your name (optional)"
+                  className="w-full bg-canvas border border-rim rounded-xl px-4 py-3 text-ink text-sm outline-none focus:border-accent placeholder:text-ink-3"
+                />
+              </div>
+              <div className="bg-card border border-rim rounded-xl px-4 py-3">
+                <p className="text-ink-2 text-sm">{worker.name} — {MONTH_NAMES[viewEndMonth - 1]} {viewEndYear}</p>
+                <p className="text-accent text-sm font-bold mt-0.5">Net Pay: {pesoFormat(netPay)}</p>
+              </div>
+              <button
+                onClick={() => { handleDownloadPayslip(); setShowPayslipModal(false) }}
+                disabled={exporting}
+                className="w-full bg-accent hover:opacity-90 text-canvas font-bold rounded-xl py-3.5 transition-opacity disabled:opacity-60"
+              >
+                {exporting ? 'Generating…' : 'Download PNG'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden payslip card — rendered off-screen for html2canvas */}
+      <WorkerPayslipCard
+        ref={payslipCardRef}
+        farmName={payslipFarmName}
+        ownerName={payslipOwnerName}
+        worker={worker}
+        month={viewEndMonth}
+        year={viewEndYear}
+        advances={periodAdvances}
+        netPay={netPay}
+        paidAt={payment?.paidAt ?? null}
+      />
     </div>
   )
 }

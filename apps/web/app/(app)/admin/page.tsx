@@ -29,6 +29,7 @@ type AdminUser = {
   trialEndsAt: string | null
   paidUntil: string | null
   isAdmin: boolean
+  isBanned: boolean
   createdAt: string | null
 }
 
@@ -81,6 +82,7 @@ const FILTERS = [
   { label: 'Active',    value: 'active' },
   { label: 'Expired',   value: 'expired' },
   { label: 'Suspended', value: 'suspended' },
+  { label: 'Banned',    value: 'banned' },
 ]
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -231,9 +233,8 @@ export default function AdminPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-ink font-bold text-sm">@{user.username}</span>
-                    {user.isAdmin && (
-                      <span className="bg-accent/15 text-accent text-[9px] font-bold px-1.5 py-0.5 rounded">ADMIN</span>
-                    )}
+                    {user.isAdmin  && <span className="bg-accent/15 text-accent text-[9px] font-bold px-1.5 py-0.5 rounded">ADMIN</span>}
+                    {user.isBanned && <span className="bg-danger/15 text-danger text-[9px] font-bold px-1.5 py-0.5 rounded">BANNED</span>}
                   </div>
                   <p className="text-ink-3 text-xs truncate">{user.tiknokId ?? '—'} · {user.email}</p>
                 </div>

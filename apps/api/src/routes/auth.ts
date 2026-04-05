@@ -1,10 +1,20 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { User } from '../models/user.js'
+import { LoginEvent } from '../models/loginEvent.js'
 import { RegisterInputSchema, LoginInputSchema } from '@app/types'
 import type { JwtPayload } from '../plugins/auth.js'
 import { sendEmail, passwordResetTemplate } from '../lib/email.js'
+
+function getIp(req: FastifyRequest): string | null {
+  const forwarded = req.headers['x-forwarded-for']
+  if (forwarded) {
+    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0]
+    return first?.trim() ?? null
+  }
+  return req.ip ?? null
+}
 
 async function generateTiknokId(): Promise<string> {
   let id: string
@@ -145,6 +155,18 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(401).send({ error: 'Unauthorized', message: 'Invalid credentials', statusCode: 401 })
     }
 
+    // Banned account check
+    if (user.isBanned) {
+      return reply.code(403).send({
+        error: 'Forbidden',
+        message: user.banReason
+          ? `Your account has been banned: ${user.banReason}`
+          : 'Your account has been banned.',
+        statusCode: 403,
+        code: 'BANNED',
+      })
+    }
+
     // Social-only account — no password set
     if (!user.passwordHash) {
       const providers = (user.authProviders ?? []).filter((p: string) => p !== 'local').join(' or ')
@@ -158,8 +180,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const valid = await bcrypt.compare(input.password, user.passwordHash)
     if (!valid) {
+      // Record failed attempt (fire-and-forget)
+      LoginEvent.create({ userId: user._id, ip: getIp(req), userAgent: req.headers['user-agent'] ?? null, method: 'local', success: false }).catch(() => null)
       return reply.code(401).send({ error: 'Unauthorized', message: 'Invalid credentials', statusCode: 401 })
     }
+
+    // Record successful login (fire-and-forget)
+    LoginEvent.create({ userId: user._id, ip: getIp(req), userAgent: req.headers['user-agent'] ?? null, method: 'local', success: true }).catch(() => null)
 
     const payload: Omit<JwtPayload, 'type'> = {
       sub: user._id.toString(),
@@ -397,6 +424,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
     })
 
     if (user) {
+      // Banned account check for Google sign-in too
+      if (user.isBanned) {
+        return reply.code(403).send({
+          error: 'Forbidden',
+          message: user.banReason
+            ? `Your account has been banned: ${user.banReason}`
+            : 'Your account has been banned.',
+          statusCode: 403,
+          code: 'BANNED',
+        })
+      }
       // Link Google to existing account if not already linked
       if (!user.googleId) {
         user.googleId = googleUser.sub
@@ -424,6 +462,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     const tokens = await issueSocialJwt(fastify, user._id.toString(), user.email)
+    // Record Google login (fire-and-forget)
+    LoginEvent.create({ userId: user._id, ip: getIp(req), userAgent: req.headers['user-agent'] ?? null, method: 'google', success: true }).catch(() => null)
     return reply.send({ ...tokens, user: { _id: user._id.toString() } })
   })
 

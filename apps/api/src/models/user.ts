@@ -28,6 +28,11 @@ export interface IUser extends Document {
   subscriptionStatus: 'trial' | 'active' | 'expired' | 'suspended'
   expoPushToken: string | null              // Expo push notification token
 
+  // ── ban ───────────────────────────────────────────────────────────────────
+  isBanned: boolean
+  banReason: string | null
+  bannedAt: Date | null
+
   // ── account security ──────────────────────────────────────────────────────
   mobileNumber: string | null               // optional, for account recovery
   accountSecuredAt: Date | null             // set when social user adds password
@@ -94,6 +99,9 @@ const UserSchema = new Schema<IUser>(
       default: 'trial',
     },
     expoPushToken: { type: String, default: null },
+    isBanned:   { type: Boolean, default: false },
+    banReason:  { type: String, default: null },
+    bannedAt:   { type: Date, default: null },
     mobileNumber:     { type: String, default: null },
     accountSecuredAt: { type: Date, default: null },
     resetToken: { type: String, default: null },

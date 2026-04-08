@@ -11,10 +11,11 @@ import type { JwtPayload } from '../plugins/auth.js'
 export default async function adminRoutes(fastify: FastifyInstance) {
 
   // ── GET /api/admin/users ─────────────────────────────────────────────────
-  // List all users with optional filter by status
+  // List all users with optional filter by status or feature
   fastify.get('/users', { preHandler: [fastify.requireAdmin] }, async (req, reply) => {
-    const { status, search, page = '1', limit = '50' } = req.query as {
+    const { status, feature, search, page = '1', limit = '50' } = req.query as {
       status?: string
+      feature?: string
       search?: string
       page?: string
       limit?: string
@@ -22,6 +23,42 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     const filter: Record<string, unknown> = {}
 
+    // ── feature filter — resolve to a set of userIds first ────────────────
+    if (feature) {
+      let userIds: string[] = []
+
+      if (feature === 'seasons') {
+        userIds = (await Season.distinct('userId')).map(String)
+      } else if (feature === 'markings') {
+        userIds = (await Season.distinct('userId', { markingsGenerated: true })).map(String)
+      } else if (feature === 'workers') {
+        userIds = (await Worker.distinct('userId')).map(String)
+      } else if (feature === 'expenses') {
+        userIds = (await FarmExpense.distinct('userId')).map(String)
+      } else if (feature === 'finance') {
+        const [wIds, eIds] = await Promise.all([
+          Worker.distinct('userId').then((ids: unknown[]) => ids.map(String)),
+          FarmExpense.distinct('userId').then((ids: unknown[]) => ids.map(String)),
+        ])
+        userIds = [...new Set([...wIds, ...eIds])]
+      } else if (feature === 'inactive') {
+        // Never logged in — users NOT in LoginEvent
+        const loggedIn = new Set((await LoginEvent.distinct('userId', { success: true })).map(String))
+        const all = await User.find({}).select('_id').lean()
+        userIds = all.map(u => u._id.toString()).filter(id => !loggedIn.has(id))
+      } else if (feature === 'no_seasons') {
+        const withSeasons = new Set((await Season.distinct('userId')).map(String))
+        const all = await User.find({}).select('_id').lean()
+        userIds = all.map(u => u._id.toString()).filter(id => !withSeasons.has(id))
+      } else if (feature === 'active_week') {
+        const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        userIds = (await LoginEvent.distinct('userId', { createdAt: { $gte: sevenDaysAgo }, success: true })).map(String)
+      }
+
+      filter._id = { $in: userIds }
+    }
+
+    // ── status / banned filter ────────────────────────────────────────────
     if (status === 'banned') {
       filter.isBanned = true
     } else if (status && ['trial', 'active', 'expired', 'suspended'].includes(status)) {
@@ -348,53 +385,78 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const now   = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
-    // 7 days ago
-    const sevenDaysAgo = new Date(today)
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const sevenDaysAgo   = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const thirtyDaysAgo  = new Date(today); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const trialEndingSoon = new Date(today); trialEndingSoon.setDate(trialEndingSoon.getDate() + 7)
 
-    // Trial ending within 7 days
-    const trialEndingSoon = new Date(today)
-    trialEndingSoon.setDate(trialEndingSoon.getDate() + 7)
-
+    // ── user subscription counts ──────────────────────────────────────────
     const [
-      totalUsers,
-      trialUsers,
-      activeUsers,
-      expiredUsers,
-      suspendedUsers,
-      newThisWeek,
-      trialEndingThisWeek,
-      newToday,
+      totalUsers, trialUsers, activeUsers, expiredUsers, suspendedUsers, bannedUsers,
+      newThisWeek, trialEndingThisWeek, newToday, activeLastWeek,
     ] = await Promise.all([
       User.countDocuments({}),
       User.countDocuments({ subscriptionStatus: 'trial' }),
       User.countDocuments({ subscriptionStatus: 'active' }),
       User.countDocuments({ subscriptionStatus: 'expired' }),
       User.countDocuments({ subscriptionStatus: 'suspended' }),
+      User.countDocuments({ isBanned: true }),
       User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      User.countDocuments({
-        subscriptionStatus: 'trial',
-        trialEndsAt: { $gte: now, $lte: trialEndingSoon },
-      }),
+      User.countDocuments({ subscriptionStatus: 'trial', trialEndsAt: { $gte: now, $lte: trialEndingSoon } }),
       User.countDocuments({ createdAt: { $gte: today } }),
+      // users who logged in at least once in last 7 days
+      LoginEvent.distinct('userId', { createdAt: { $gte: sevenDaysAgo }, success: true })
+        .then((ids: unknown[]) => ids.length),
     ])
 
-    // New registrations per day — last 30 days
-    const thirtyDaysAgo = new Date(today)
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // ── feature adoption — distinct userIds ───────────────────────────────
+    const [
+      usersWithSeasons,
+      usersWithMarkings,
+      usersWithWorkers,
+      usersWithExpenses,
+      totalSeasons,
+      totalMatings,
+      totalMarkingsGenerated,
+      totalWorkers,
+      totalExpenses,
+    ] = await Promise.all([
+      Season.distinct('userId').then((ids: unknown[]) => ids.length),
+      Season.distinct('userId', { markingsGenerated: true }).then((ids: unknown[]) => ids.length),
+      Worker.distinct('userId').then((ids: unknown[]) => ids.length),
+      FarmExpense.distinct('userId').then((ids: unknown[]) => ids.length),
+      Season.countDocuments({}),
+      Mating.countDocuments({}),
+      Season.countDocuments({ markingsGenerated: true }),
+      Worker.countDocuments({}),
+      FarmExpense.countDocuments({}),
+    ])
 
+    // users with finance = at least 1 worker OR 1 expense
+    const [workerUserIds, expenseUserIds] = await Promise.all([
+      Worker.distinct('userId').then((ids: unknown[]) => ids.map(String)),
+      FarmExpense.distinct('userId').then((ids: unknown[]) => ids.map(String)),
+    ])
+    const financeUserIds = new Set([...workerUserIds, ...expenseUserIds])
+    const usersWithFinance = financeUserIds.size
+
+    // never logged in
+    const loggedInUserIds = await LoginEvent.distinct('userId', { success: true })
+    const neverLoggedIn   = totalUsers - new Set(loggedInUserIds.map(String)).size
+
+    // no seasons (registered but never created one)
+    const seasonUserIds  = await Season.distinct('userId')
+    const noSeasons      = totalUsers - new Set(seasonUserIds.map(String)).size
+
+    // expense category breakdown
+    const expenseByCat = await FarmExpense.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ])
+
+    // ── daily registrations — last 30 days ────────────────────────────────
     const dailyRegistrations = await User.aggregate([
       { $match: { createdAt: { $gte: thirtyDaysAgo } } },
-      {
-        $group: {
-          _id: {
-            year:  { $year: '$createdAt' },
-            month: { $month: '$createdAt' },
-            day:   { $dayOfMonth: '$createdAt' },
-          },
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }, count: { $sum: 1 } } },
       { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
     ])
 
@@ -405,16 +467,79 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         active: activeUsers,
         expired: expiredUsers,
         suspended: suspendedUsers,
+        banned: bannedUsers,
         newToday,
         newThisWeek,
         trialEndingThisWeek,
+        activeLastWeek,
+        neverLoggedIn,
+        noSeasons,
       },
-      dailyRegistrations: dailyRegistrations.map((d) => ({
+      adoption: {
+        usersWithSeasons,
+        usersWithMarkings,
+        usersWithFinance,
+        usersWithWorkers,
+        usersWithExpenses,
+      },
+      breeding: {
+        totalSeasons,
+        totalMatings,
+        totalMarkingsGenerated,
+      },
+      finance: {
+        totalWorkers,
+        totalExpenses,
+        expenseByCat: expenseByCat.map((e: { _id: string; count: number }) => ({ category: e._id, count: e.count })),
+      },
+      dailyRegistrations: dailyRegistrations.map((d: { _id: { year: number; month: number; day: number }; count: number }) => ({
         date: `${d._id.year}-${String(d._id.month).padStart(2, '0')}-${String(d._id.day).padStart(2, '0')}`,
         count: d.count,
       })),
     })
   })
+
+  // ── GET /api/admin/analytics ─────────────────────────────────────────────
+  // Platform breakdown + daily logins from LoginEvent user-agents
+  fastify.get('/analytics', { preHandler: [fastify.requireAdmin] }, async (_req, reply) => {
+    const today         = new Date(); today.setHours(0, 0, 0, 0)
+    const thirtyDaysAgo = new Date(today); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const [allLogins, dailyLogins] = await Promise.all([
+      LoginEvent.find({ success: true }).select('userAgent method createdAt').lean(),
+      LoginEvent.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo }, success: true } },
+        { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
+      ]),
+    ])
+
+    // Parse platform from user-agent
+    let android = 0, iphone = 0, desktop = 0, other = 0
+    let google = 0, email = 0
+    for (const e of allLogins) {
+      const ua = (e.userAgent ?? '').toLowerCase()
+      if (ua.includes('android'))       android++
+      else if (ua.includes('iphone') || ua.includes('ipad')) iphone++
+      else if (ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari')) desktop++
+      else other++
+
+      if (e.method === 'google') google++
+      else email++
+    }
+
+    return reply.send({
+      platform: { android, iphone, desktop, other },
+      loginMethod: { google, email },
+      dailyLogins: (dailyLogins as { _id: { year: number; month: number; day: number }; count: number }[]).map(d => ({
+        date: `${d._id.year}-${String(d._id.month).padStart(2, '0')}-${String(d._id.day).padStart(2, '0')}`,
+        count: d.count,
+      })),
+    })
+  })
+
+  // ── GET /api/admin/users?feature=xxx ─────────────────────────────────────
+  // Already handled above — feature filter added to the users list endpoint below
 }
 
 // ── helper ───────────────────────────────────────────────────────────────────

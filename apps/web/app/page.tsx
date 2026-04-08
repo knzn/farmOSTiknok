@@ -46,7 +46,7 @@ export default function LandingPage() {
         <p className="text-ink-3 text-sm mt-6">60-day free trial · No credit card required</p>
 
         {/* Download buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 mt-8 w-full sm:w-auto">
+        <div className="flex flex-col items-center gap-3 mt-8 w-full sm:w-auto">
           <a
             href={process.env.NEXT_PUBLIC_APK_URL ?? '#'}
             target="_blank"
@@ -59,6 +59,14 @@ export default function LandingPage() {
             </svg>
             Download for Android
           </a>
+
+          {/* iPhone hint */}
+          <div className="flex items-center gap-2 bg-card border border-rim rounded-full px-5 py-2.5 w-full sm:w-auto justify-center">
+            <span className="text-lg">🍎</span>
+            <p className="text-ink-2 text-sm">
+              iPhone? <span className="text-ink font-semibold">Safari → Share → Add to Home Screen</span>
+            </p>
+          </div>
         </div>
       </section>
 

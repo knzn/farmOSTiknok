@@ -71,21 +71,21 @@ const CreateExpenseSchema = z.discriminatedUnion('category', [
     unit:         z.string().min(1).max(50),
     quantity:     z.number().positive(),
     pricePerUnit: z.number().min(0),
-    notes:        z.string().max(500).trim().optional(),
+    notes:        z.string().max(500).trim().nullable().optional(),
   }),
   // direct types
   z.object({
     category:    z.enum(['workers_extra_budget']),
     date:        z.string().min(1),
     amount:      z.number().min(0).default(0),
-    notes:       z.string().max(500).trim().optional(),
+    notes:       z.string().max(500).trim().nullable().optional(),
   }),
   z.object({
     category:    z.enum(['miscellaneous']),
     date:        z.string().min(1),
     description: z.string().min(1).max(300).trim(),
     amount:      z.number().min(0),
-    notes:       z.string().max(500).trim().optional(),
+    notes:       z.string().max(500).trim().nullable().optional(),
   }),
 ])
 

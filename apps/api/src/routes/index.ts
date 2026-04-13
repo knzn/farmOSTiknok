@@ -7,6 +7,7 @@ import userRoutes from './users.js'
 import dashboardRoutes from './dashboard.js'
 import workerRoutes from './workers.js'
 import expenseRoutes from './expenses.js'
+import saleRoutes from './sales.js'
 import adminRoutes from './admin.js'
 
 export async function registerRoutes(fastify: FastifyInstance) {
@@ -18,5 +19,6 @@ export async function registerRoutes(fastify: FastifyInstance) {
   fastify.register(dashboardRoutes, { prefix: '/api/dashboard' })
   fastify.register(workerRoutes, { prefix: '/api/workers' })
   fastify.register(expenseRoutes, { prefix: '/api/expenses' })
+  fastify.register(saleRoutes, { prefix: '/api/sales' })
   fastify.register(adminRoutes, { prefix: '/api/admin' })
 }

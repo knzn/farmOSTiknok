@@ -3,6 +3,7 @@ import { Season } from '../models/season.js'
 import { Mating } from '../models/mating.js'
 import { Worker } from '../models/worker.js'
 import { FarmExpense } from '../models/expense.js'
+import { FarmSale } from '../models/sale.js'
 import type { JwtPayload } from '../plugins/auth.js'
 
 function userId(req: { user: unknown }): string {
@@ -21,11 +22,12 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     const currentMonth = now.getMonth() + 1
     const currentYear = now.getFullYear()
 
-    const [seasons, matings, workers, expensesThisMonth] = await Promise.all([
+    const [seasons, matings, workers, expensesThisMonth, salesThisMonth] = await Promise.all([
       Season.find({ userId: uid }).sort({ createdAt: -1 }).lean(),
       Mating.find({ userId: uid }).lean(),
       Worker.find({ userId: uid }).lean(),
       FarmExpense.find({ userId: uid, month: currentMonth, year: currentYear }).lean(),
+      FarmSale.find({ userId: uid, month: currentMonth, year: currentYear }).lean(),
     ])
 
     // ── Breeding ─────────────────────────────────────────────────────────────
@@ -86,6 +88,10 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // ── Sales ─────────────────────────────────────────────────────────────────
+    const totalSalesThisMonth = salesThisMonth.reduce((sum, s) => sum + s.amount, 0)
+    const totalOutflowThisMonth = totalExpensesThisMonth + totalSalaryDue
+
     const finance = {
       totalWorkers: workers.length,
       totalSalaryDue,
@@ -93,6 +99,9 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       unpaidWorkers,
       totalExpensesThisMonth,
       expensesByCategory,
+      totalSalesThisMonth,
+      totalOutflowThisMonth,
+      netIncomeThisMonth: totalSalesThisMonth - totalOutflowThisMonth,
     }
 
     return reply.send({ breeding, finance })

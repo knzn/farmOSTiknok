@@ -48,30 +48,18 @@ function MatingBlock({ mating }: { mating: Mating }) {
       width: '48%',
       boxSizing: 'border-box',
     }}>
-      <p style={{ color: '#FFFFFF', fontWeight: 700, fontSize: 12, marginBottom: 4, wordBreak: 'break-word' }}>
+      <p style={{ color: '#FFFFFF', fontWeight: 700, fontSize: 12, marginBottom: 6, wordBreak: 'break-word' }}>
         {mating.maleName}
       </p>
-      {noseColor && (
-        <div style={{
-          display: 'inline-block',
-          backgroundColor: noseColor + '22',
-          borderRadius: 5,
-          padding: '2px 7px',
-          border: `1px solid ${noseColor}55`,
-          marginBottom: 6,
-        }}>
-          <span style={{ color: noseColor, fontSize: 10, fontWeight: 700 }}>{mating.noseGroup}</span>
-        </div>
-      )}
       <div style={{ height: 1, backgroundColor: '#2A2A2A', marginBottom: 6 }} />
       {markedHens.map(hen => {
         const color = noseColor ?? '#C8A84B'
         return (
-          <div key={hen._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-            <span style={{ color: '#808080', fontSize: 11, flex: 1, marginRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div key={hen._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3, gap: 4 }}>
+            <span style={{ color: '#808080', fontSize: 11, flex: 1, wordBreak: 'break-word' }}>
               {hen.henName}
             </span>
-            <span style={{ color, fontSize: 11, fontWeight: 700 }}>{hen.marking}</span>
+            <span style={{ color, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{hen.marking}</span>
           </div>
         )
       })}

@@ -20,8 +20,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    // Wait for Zustand persist to hydrate from localStorage before checking auth
-    setHydrated(true)
+    // Wait for Zustand persist to finish rehydrating from cookie before auth check
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true))
+    if (useAuthStore.persist.hasHydrated()) setHydrated(true)
+    return unsub
   }, [])
 
   useEffect(() => {
